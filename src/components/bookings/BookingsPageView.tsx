@@ -1,0 +1,412 @@
+'use client';
+
+import { BOOKING_TYPE_LABELS, BookingType } from '@/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Button, ConfirmDialog, confirmDialog, Dialog } from '@/components/ui';
+import { BookingFormPanel } from '@/components/bookings/BookingFormPanel';
+import { useEffect, useState } from 'react';
+import { api, unwrap } from '@/lib/api';
+import { fetchPaginated } from '@/lib/list';
+import { serviceTypeLabel } from '@/lib/quotations';
+
+interface ConsignmentRow {
+  id: string;
+  awb: string;
+  bookingType?: BookingType;
+  receiverName: string;
+  receiverCity?: string | null;
+  bookingDate?: string | null;
+  createdAt: string;
+  customer?: { name: string } | null;
+  partyName?: string | null;
+  weightKg?: string | number | null;
+  rateSectionId?: string | null;
+  price?: string | number | null;
+  basePrice?: string | number | null;
+  cgst?: string | number | null;
+  sgst?: string | number | null;
+  igst?: string | number | null;
+}
+
+interface ConsignmentDetail {
+  id: string;
+  awb: string;
+  bookingType?: BookingType;
+  bookingDate?: string | null;
+  receiverName: string;
+  receiverPhone?: string | null;
+  receiverAddress?: string | null;
+  receiverCity?: string | null;
+  receiverState?: string | null;
+  rateSectionId?: string | null;
+  weightKg?: string | number | null;
+  price?: string | number | null;
+  basePrice?: string | number | null;
+  cgst?: string | number | null;
+  sgst?: string | number | null;
+  igst?: string | number | null;
+  remarks?: string | null;
+  customer?: { name?: string } | null;
+  partyName?: string | null;
+}
+
+function money(value: string | number | null | undefined) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n.toFixed(2) : '0.00';
+}
+
+/** Display total — GST-inclusive uses price; exclusive/legacy adds taxes. */
+function bookingTotal(row: {
+  price?: string | number | null;
+  basePrice?: string | number | null;
+  cgst?: string | number | null;
+  sgst?: string | number | null;
+  igst?: string | number | null;
+}) {
+  const price = Number(row.price ?? 0);
+  const base = Number(row.basePrice ?? 0);
+  const tax =
+    Number(row.cgst ?? 0) + Number(row.sgst ?? 0) + Number(row.igst ?? 0);
+  if (tax <= 0) return price;
+  if (base > 0 && Math.abs(price - (base + tax)) < 0.05) return price;
+  return roundMoney(price + tax);
+}
+
+function roundMoney(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function weightGrams(value: string | number | null | undefined) {
+  const kg = Number(value ?? 0);
+  if (!Number.isFinite(kg)) return '—';
+  return String(Math.round(kg * 1000));
+}
+
+function modePath(mode: BookingType) {
+  return mode === BookingType.CASH ? '/bookings/cash' : '/bookings/account';
+}
+
+export function BookingsPageView({ mode }: { mode: BookingType }) {
+  const qc = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const editId = searchParams.get('edit')?.trim();
+    if (!editId) return;
+    setEditingId(editId);
+    router.replace(modePath(mode));
+  }, [searchParams, mode, router]);
+
+  const recentQuery = useQuery({
+    queryKey: ['consignments-recent', mode],
+    queryFn: () =>
+      fetchPaginated<ConsignmentRow>('/consignments', {
+        page: 1,
+        pageSize: 10,
+        sortBy: 'createdAt',
+        sortOrder: 'DESC',
+        mine: true,
+        bookingType: mode,
+      }),
+  });
+
+  const viewQuery = useQuery({
+    queryKey: ['booking-detail', viewId],
+    enabled: Boolean(viewId),
+    queryFn: async () => {
+      const res = await api.get(`/consignments/${viewId}`);
+      return unwrap<ConsignmentDetail>(res.data);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/consignments/${id}`);
+    },
+    onSuccess: async (_data, id) => {
+      if (editingId === id) setEditingId(null);
+      if (viewId === id) setViewId(null);
+      await qc.invalidateQueries({ queryKey: ['consignments-recent'] });
+      await qc.invalidateQueries({ queryKey: ['consignments'] });
+      await qc.invalidateQueries({ queryKey: ['dashboard-counts'] });
+      await qc.invalidateQueries({ queryKey: ['booking-list'] });
+    },
+  });
+
+  const askDelete = (row: ConsignmentRow) => {
+    confirmDialog({
+      header: 'Delete booking',
+      message: `Delete booking ${row.awb}? Bookings already on an invoice cannot be deleted.`,
+      acceptClassName: 'p-button-danger',
+      acceptLabel: 'Delete',
+      rejectLabel: 'Cancel',
+      accept: () => deleteMutation.mutate(row.id),
+    });
+  };
+
+  const detail = viewQuery.data;
+  const detailTotal = detail ? money(bookingTotal(detail)) : '0.00';
+  const detailBase = detail
+    ? money(
+        Number(detail.basePrice ?? 0) > 0
+          ? detail.basePrice
+          : Number(detail.price ?? 0),
+      )
+    : '0.00';
+  const title =
+    mode === BookingType.ACCOUNT ? 'Account booking' : 'Cash booking';
+  const isCashView = mode === BookingType.CASH;
+
+  return (
+    <div>
+      <ConfirmDialog />
+      <div className="page-header">
+        <h1>{title}</h1>
+      </div>
+
+      <div className="bookings-split">
+        <BookingFormPanel
+          mode={mode}
+          editingId={editingId}
+          variant="page"
+          showRemember
+          onEditingChange={setEditingId}
+          onCancel={() => setEditingId(null)}
+          onSaved={(info) => {
+            if (!info.created || !info.id) return;
+            confirmDialog({
+              header: 'Print receipt?',
+              message: 'Open the booking receipt for printing?',
+              acceptLabel: 'Print',
+              rejectLabel: 'Not now',
+              accept: () => router.push(`/bookings/${info.id}/print`),
+            });
+          }}
+        />
+
+        <aside className="bookings-split-recent panel">
+          <h2>Recent {BOOKING_TYPE_LABELS[mode].toLowerCase()}</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Last {recentQuery.data?.data?.length ?? 0} of yours
+          </p>
+          <div className="booking-recent-list">
+            {(recentQuery.data?.data ?? []).map((row) => {
+              const accountOrParty =
+                row.customer?.name || row.partyName || null;
+              const metaParts = [
+                row.bookingDate ||
+                  new Date(row.createdAt).toLocaleDateString(),
+                row.receiverCity || null,
+                row.rateSectionId
+                  ? serviceTypeLabel(row.rateSectionId)
+                  : null,
+                row.weightKg != null
+                  ? `${weightGrams(row.weightKg)} g`
+                  : null,
+              ].filter(Boolean);
+
+              return (
+                <div key={row.id} className="booking-recent-card">
+                  <div className="booking-recent-main">
+                    <div className="booking-recent-line">
+                      <button
+                        type="button"
+                        className="booking-recent-awb"
+                        onClick={() => setViewId(row.id)}
+                      >
+                        {row.awb}
+                      </button>
+                      <span className="booking-recent-rate">
+                        ₹{money(bookingTotal(row))}
+                      </span>
+                    </div>
+                    <div className="booking-recent-receiver">
+                      {row.receiverName}
+                      {accountOrParty ? (
+                        <span className="muted"> · {accountOrParty}</span>
+                      ) : null}
+                    </div>
+                    {metaParts.length ? (
+                      <div className="booking-recent-meta">
+                        {metaParts.join(' · ')}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="booking-recent-actions">
+                    <button
+                      type="button"
+                      className="booking-recent-icon-btn"
+                      title="View"
+                      aria-label="View"
+                      onClick={() => setViewId(row.id)}
+                    >
+                      <i className="pi pi-eye" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="booking-recent-icon-btn"
+                      title="Print receipt"
+                      aria-label="Print receipt"
+                      onClick={() =>
+                        router.push(`/bookings/${row.id}/print`)
+                      }
+                    >
+                      <i className="pi pi-print" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="booking-recent-icon-btn"
+                      title="Edit"
+                      aria-label="Edit"
+                      onClick={() => setEditingId(row.id)}
+                    >
+                      <i className="pi pi-pencil" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="booking-recent-icon-btn danger"
+                      title="Delete"
+                      aria-label="Delete"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => askDelete(row)}
+                    >
+                      <i className="pi pi-trash" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+      </div>
+
+      <Dialog
+        header={
+          detail
+            ? `Booking · ${detail.awb}`
+            : viewQuery.isFetching
+              ? 'Loading booking…'
+              : 'Booking details'
+        }
+        visible={Boolean(viewId)}
+        onHide={() => setViewId(null)}
+        style={{ width: 'min(720px, 96vw)' }}
+      >
+        {viewQuery.isFetching && !detail ? (
+          <p className="muted">Loading…</p>
+        ) : null}
+        {viewQuery.isError ? (
+          <p className="error-text">Booking not found</p>
+        ) : null}
+        {detail ? (
+          <div className="form-grid">
+            <div className="field">
+              <label>Booking Date</label>
+              <div>{detail.bookingDate || '—'}</div>
+            </div>
+            <div className="field">
+              <label>Document Number</label>
+              <div>{detail.awb || '—'}</div>
+            </div>
+            <div className="field">
+              <label>Booking Type</label>
+              <div>
+                {detail.bookingType
+                  ? BOOKING_TYPE_LABELS[detail.bookingType]
+                  : '—'}
+              </div>
+            </div>
+            <div className="field">
+              <label>Party</label>
+              <div>{detail.customer?.name || detail.partyName || '—'}</div>
+            </div>
+            <div className="field">
+              <label>Destination</label>
+              <div>
+                {[detail.receiverCity, detail.receiverState]
+                  .filter(Boolean)
+                  .join(', ') || '—'}
+              </div>
+            </div>
+            <div className="field">
+              <label>Receiver Name</label>
+              <div>{detail.receiverName}</div>
+            </div>
+            <div className="field">
+              <label>Receiver Phone</label>
+              <div>{detail.receiverPhone || '—'}</div>
+            </div>
+            <div className="field full">
+              <label>Receiver Address</label>
+              <div>{detail.receiverAddress || '—'}</div>
+            </div>
+            <div className="field">
+              <label>Service Type</label>
+              <div>
+                {detail.rateSectionId
+                  ? serviceTypeLabel(detail.rateSectionId)
+                  : '—'}
+              </div>
+            </div>
+            <div className="field">
+              <label>Weight (g)</label>
+              <div>{weightGrams(detail.weightKg)}</div>
+            </div>
+            <div className="field">
+              <label>Price</label>
+              <div>{detailTotal}</div>
+            </div>
+            {isCashView ? (
+              <>
+                <div className="field">
+                  <label>Base price</label>
+                  <div>{detailBase}</div>
+                </div>
+                <div className="field">
+                  <label>CGST</label>
+                  <div>{money(detail.cgst)}</div>
+                </div>
+                <div className="field">
+                  <label>SGST</label>
+                  <div>{money(detail.sgst)}</div>
+                </div>
+                <div className="field">
+                  <label>IGST</label>
+                  <div>{money(detail.igst)}</div>
+                </div>
+              </>
+            ) : null}
+            <div className="field full">
+              <label>Remarks</label>
+              <div>{detail.remarks || '—'}</div>
+            </div>
+            <div
+              className="field full"
+              style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}
+            >
+              <Button
+                label="Print receipt"
+                icon="pi pi-print"
+                onClick={() => router.push(`/bookings/${detail.id}/print`)}
+              />
+              <Button
+                label="Edit"
+                icon="pi pi-pencil"
+                outlined
+                onClick={() => {
+                  setViewId(null);
+                  setEditingId(detail.id);
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </Dialog>
+    </div>
+  );
+}
