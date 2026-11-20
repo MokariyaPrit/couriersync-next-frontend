@@ -239,8 +239,10 @@ export default function CitiesPage() {
             <Select
               value={form.stateId || null}
               options={stateOptions}
-              onChange={(e) => setForm({ ...form, stateId: e.value })}
+              onChange={(e) => setForm({ ...form, stateId: e.value || '' })}
               placeholder="Select state"
+              filter
+              showClear
               style={{ width: '100%' }}
             />
           </div>

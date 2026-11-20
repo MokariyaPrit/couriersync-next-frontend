@@ -19,6 +19,7 @@ interface SelectProps {
   disabled?: boolean;
   filter?: boolean;
   showClear?: boolean;
+  tabIndex?: number;
 }
 
 export function Select({
@@ -31,6 +32,7 @@ export function Select({
   disabled,
   filter,
   showClear,
+  tabIndex,
 }: SelectProps) {
   return (
     <Dropdown
@@ -43,6 +45,8 @@ export function Select({
       disabled={disabled}
       filter={filter}
       showClear={showClear}
+      tabIndex={tabIndex}
+      appendTo={typeof document !== 'undefined' ? document.body : undefined}
     />
   );
 }
