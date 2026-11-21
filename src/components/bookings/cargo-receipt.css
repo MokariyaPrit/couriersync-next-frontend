@@ -1,0 +1,600 @@
+/* Cargo booking print slips — 4 selectable layouts */
+
+.cr-print-page {
+  min-height: 100vh;
+  background: #5a534c;
+  padding: 1rem 1rem 2rem;
+}
+
+.cr-print-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0 auto 1rem;
+  max-width: 980px;
+  color: #f0e8de;
+}
+
+.cr-print-chrome h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.cr-print-chrome .muted {
+  color: #d7cfc6;
+  font-size: 0.85rem;
+}
+
+.cr-preview-label {
+  text-align: center;
+  color: #f0e8de;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.cr-preview-frame {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+}
+
+.cr-preview-frame--landscape {
+  aspect-ratio: 210 / 120;
+  container-type: size;
+  position: relative;
+}
+
+.cr-preview-frame--portrait {
+  width: min(100%, 420px);
+  aspect-ratio: 148 / 210;
+  container-type: size;
+  position: relative;
+}
+
+.cr-sheet {
+  background: #fff;
+  color: #111;
+  box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+  line-height: 1.25;
+  overflow: hidden;
+}
+
+.cr-preview-frame--landscape .cr-sheet {
+  position: absolute;
+  inset: 0;
+  width: 210mm;
+  height: 120mm;
+  transform-origin: top left;
+  transform: scale(calc(100cqw / 210mm));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.cr-preview-frame--portrait .cr-sheet {
+  position: absolute;
+  inset: 0;
+  width: 148mm;
+  height: 210mm;
+  transform-origin: top left;
+  transform: scale(calc(100cqw / 148mm));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.cr-lbl {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #555;
+}
+
+.cr-logo {
+  display: block;
+  height: auto;
+  width: auto;
+  max-height: 11mm;
+  max-width: 32mm;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.cr-logo--classic {
+  max-height: 12mm;
+  max-width: 34mm;
+}
+
+.cr-logo--bands {
+  max-height: 10mm;
+  max-width: 30mm;
+}
+
+.cr-logo--compact {
+  max-height: 14mm;
+  max-width: 36mm;
+}
+
+.cr-logo--ledger {
+  max-height: 12mm;
+  max-width: 32mm;
+}
+
+.cr-logo-plate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 2px;
+  padding: 1.2mm 1.6mm;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.cr-logo-plate .cr-logo,
+.cr-logo-plate .cr-logo-fallback {
+  max-height: 9mm;
+  max-width: 28mm;
+}
+
+.cr-logo-fallback {
+  font-weight: 700;
+  font-size: 9px;
+  line-height: 1.2;
+  max-width: 32mm;
+  color: #111;
+}
+
+.cr-badge {
+  display: inline-block;
+  border: 1px solid #111;
+  padding: 2px 6px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cr-awb {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.cr-classic-parties p,
+.cr-bands-cards p,
+.cr-compact-party p {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.cr-charge-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px dotted #ccc;
+}
+
+.cr-charge-net {
+  border-bottom: none;
+  border-top: 1.5px solid #111;
+  margin-top: 4px;
+  padding-top: 4px;
+  font-size: 11px;
+}
+
+.cr-charges-box {
+  border: 1px solid #111;
+  padding: 6px 8px;
+}
+
+.cr-remarks {
+  margin: 4px 0 0;
+  font-size: 9px;
+}
+
+/* A — Classic grid */
+.cr-classic {
+  padding: 4mm;
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+  border: 1px solid #111;
+}
+
+.cr-classic-head {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 4mm;
+  border-bottom: 1.5px solid #111;
+  padding-bottom: 3mm;
+}
+
+.cr-classic-brand {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.cr-classic-brand span {
+  display: block;
+  font-size: 9px;
+  color: #444;
+}
+
+.cr-classic-route,
+.cr-classic-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cr-classic-parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm;
+}
+
+.cr-classic-parties section,
+.cr-bands-cards section {
+  border: 1px solid #111;
+  padding: 4px 6px;
+  min-height: 28mm;
+}
+
+.cr-classic-parties h3,
+.cr-bands-cards h3,
+.cr-compact-party h3,
+.cr-ledger-side h3 {
+  margin: 0 0 4px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cr-classic-ship {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cr-classic-ship th,
+.cr-classic-ship td {
+  border: 1px solid #111;
+  padding: 3px 4px;
+  text-align: center;
+}
+
+.cr-classic-ship th {
+  background: #f3f3f3;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.cr-classic-bottom {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.9fr;
+  gap: 3mm;
+  flex: 1;
+}
+
+.cr-classic-terms {
+  border: 1px solid #111;
+  padding: 4px 6px;
+}
+
+.cr-classic-terms h4 {
+  margin: 0 0 4px;
+  font-size: 9px;
+}
+
+.cr-classic-signs {
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+}
+
+.cr-classic-signs > div {
+  border: 1px solid #111;
+  flex: 1;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 22mm;
+}
+
+/* B — Bold bands */
+.cr-bands {
+  display: flex;
+  flex-direction: column;
+}
+
+.cr-bands-top {
+  background: #111;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4mm;
+  padding: 2.5mm 4mm;
+  min-height: 14mm;
+}
+
+.cr-bands-brand {
+  display: flex;
+  align-items: center;
+  gap: 2.5mm;
+  min-width: 0;
+}
+
+.cr-bands-brand > strong {
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70mm;
+}
+
+.cr-bands-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cr-bands-route {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr 1.1fr;
+  gap: 3mm;
+  align-items: center;
+  padding: 3mm 4mm;
+  background: #eee;
+  border-bottom: 1px solid #111;
+}
+
+.cr-bands-arrow {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cr-bands-awb strong {
+  display: block;
+  font-size: 13px;
+}
+
+.cr-bands-body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.9fr;
+  gap: 3mm;
+  padding: 3mm 4mm;
+  flex: 1;
+}
+
+.cr-bands-cards {
+  display: grid;
+  gap: 3mm;
+}
+
+.cr-bands-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2mm;
+  align-content: start;
+}
+
+.cr-bands-facts > div {
+  border: 1px solid #bbb;
+  padding: 3px 5px;
+}
+
+.cr-bands-money {
+  border: 1.5px solid #111;
+  padding: 6px 8px;
+}
+
+.cr-bands-foot {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-top: 1px solid #111;
+  padding: 3mm 4mm;
+  gap: 3mm;
+  margin-top: auto;
+}
+
+.cr-bands-foot span {
+  border-top: 1px solid #999;
+  padding-top: 10mm;
+  font-size: 9px;
+}
+
+/* C — Compact portrait */
+.cr-compact {
+  padding: 5mm;
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+  border: 1px solid #111;
+}
+
+.cr-compact-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1.5px solid #111;
+  padding-bottom: 3mm;
+}
+
+.cr-compact-head span {
+  display: block;
+  font-size: 9px;
+  color: #444;
+}
+
+.cr-compact-awb {
+  text-align: center;
+  border: 1.5px solid #111;
+  padding: 4mm 2mm;
+}
+
+.cr-compact-awb strong {
+  display: block;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+.cr-compact-route {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm;
+}
+
+.cr-compact-route > div,
+.cr-compact-party {
+  border: 1px solid #111;
+  padding: 4px 6px;
+}
+
+.cr-compact-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cr-compact-chips span {
+  border: 1px solid #111;
+  padding: 3px 6px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.cr-compact-charges {
+  margin-top: auto;
+}
+
+.cr-compact-foot {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #111;
+  padding-top: 3mm;
+  font-size: 9px;
+}
+
+/* D — Ledger */
+.cr-ledger {
+  display: grid;
+  grid-template-columns: 1.7fr 0.9fr;
+  height: 100%;
+}
+
+.cr-ledger-main {
+  padding: 4mm;
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+  border-right: 1.5px solid #111;
+}
+
+.cr-ledger-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: start;
+  border-bottom: 1px solid #111;
+  padding-bottom: 3mm;
+}
+
+.cr-ledger-head span {
+  display: block;
+  font-size: 9px;
+  color: #444;
+}
+
+.cr-ledger-awb {
+  text-align: right;
+}
+
+.cr-ledger-route {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm;
+}
+
+.cr-ledger-route > div {
+  border: 1px solid #111;
+  padding: 4px 6px;
+}
+
+.cr-ledger-parties {
+  min-height: auto;
+}
+
+.cr-ledger-signs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 3mm;
+  margin-top: auto;
+}
+
+.cr-ledger-signs span {
+  border-top: 1px solid #999;
+  padding-top: 10mm;
+  font-size: 9px;
+}
+
+.cr-ledger-side {
+  padding: 4mm;
+  background: #f7f7f7;
+  display: flex;
+  flex-direction: column;
+}
+
+.cr-ledger-side .cr-charge-net {
+  font-size: 13px;
+  margin-top: auto;
+}
+
+@media print {
+  .cr-print-page {
+    background: #fff;
+    padding: 0;
+    min-height: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .cr-preview-frame,
+  .cr-preview-frame--landscape,
+  .cr-preview-frame--portrait {
+    width: auto;
+    aspect-ratio: auto;
+    margin: 0;
+  }
+
+  .cr-preview-frame--landscape .cr-sheet,
+  .cr-preview-frame--portrait .cr-sheet {
+    position: static;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .cr-preview-frame--landscape .cr-sheet {
+    width: 210mm;
+    height: 120mm;
+  }
+
+  .cr-preview-frame--portrait .cr-sheet {
+    width: 148mm;
+    height: 210mm;
+  }
+
+  @page {
+    size: auto;
+    margin: 6mm;
+  }
+}

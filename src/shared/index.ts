@@ -76,6 +76,32 @@ export const BOOKING_TYPE_LABELS: Record<BookingType, string> = {
   [BookingType.CASH]: 'Cash',
 };
 
+/** Regular courier vs cargo booking form / fields */
+export enum ShipmentKind {
+  REGULAR = 'REGULAR',
+  CARGO = 'CARGO',
+}
+
+export const SHIPMENT_KIND_LABELS: Record<ShipmentKind, string> = {
+  [ShipmentKind.REGULAR]: 'Regular',
+  [ShipmentKind.CARGO]: 'Cargo',
+};
+
+/** Cargo booking print slip layouts */
+export enum CargoPrintTemplate {
+  CLASSIC_GRID = 'CLASSIC_GRID',
+  BOLD_BANDS = 'BOLD_BANDS',
+  COMPACT_PORTRAIT = 'COMPACT_PORTRAIT',
+  LEDGER = 'LEDGER',
+}
+
+export const CARGO_PRINT_TEMPLATE_LABELS: Record<CargoPrintTemplate, string> = {
+  [CargoPrintTemplate.CLASSIC_GRID]: 'Classic grid',
+  [CargoPrintTemplate.BOLD_BANDS]: 'Bold bands',
+  [CargoPrintTemplate.COMPACT_PORTRAIT]: 'Compact portrait',
+  [CargoPrintTemplate.LEDGER]: 'Ledger',
+};
+
 /** Rate template purpose */
 export enum RateTemplateKind {
   QUOTATION = 'QUOTATION',

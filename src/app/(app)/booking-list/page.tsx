@@ -1,6 +1,12 @@
 'use client';
 
-import { BOOKING_TYPE_LABELS, BookingType, Role } from '@/shared';
+import {
+  BOOKING_TYPE_LABELS,
+  BookingType,
+  Role,
+  ShipmentKind,
+  SHIPMENT_KIND_LABELS,
+} from '@/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -25,6 +31,7 @@ interface BookingRow {
   id: string;
   awb: string;
   bookingType: BookingType;
+  shipmentKind?: ShipmentKind;
   bookingDate?: string | null;
   receiverName: string;
   receiverPhone?: string | null;
@@ -115,12 +122,18 @@ export default function BookingListPage() {
   const [viewId, setViewId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<BookingType>(BookingType.ACCOUNT);
+  const [editShipmentKind, setEditShipmentKind] = useState<ShipmentKind>(
+    ShipmentKind.REGULAR,
+  );
   const [editAwb, setEditAwb] = useState('');
   const isAdmin = user?.role === Role.ADMIN;
 
-  const openEdit = (row: Pick<BookingRow, 'id' | 'bookingType' | 'awb'>) => {
+  const openEdit = (
+    row: Pick<BookingRow, 'id' | 'bookingType' | 'shipmentKind' | 'awb'>,
+  ) => {
     setViewId(null);
     setEditMode(row.bookingType || BookingType.ACCOUNT);
+    setEditShipmentKind(row.shipmentKind || ShipmentKind.REGULAR);
     setEditAwb(row.awb || '');
     setEditId(row.id);
   };
@@ -128,6 +141,7 @@ export default function BookingListPage() {
   const closeEdit = () => {
     setEditId(null);
     setEditAwb('');
+    setEditShipmentKind(ShipmentKind.REGULAR);
   };
 
   const listQuery = useQuery({
@@ -210,7 +224,14 @@ export default function BookingListPage() {
       {
         header: 'Type',
         body: (row) =>
-          BOOKING_TYPE_LABELS[row.bookingType] || row.bookingType,
+          [
+            BOOKING_TYPE_LABELS[row.bookingType] || row.bookingType,
+            row.shipmentKind === ShipmentKind.CARGO
+              ? SHIPMENT_KIND_LABELS[ShipmentKind.CARGO]
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
       },
       {
         header: 'Party',
@@ -448,6 +469,7 @@ export default function BookingListPage() {
           <BookingFormPanel
             key={editId}
             mode={editMode}
+            shipmentKind={editShipmentKind}
             editingId={editId}
             variant="dialog"
             showRemember={false}

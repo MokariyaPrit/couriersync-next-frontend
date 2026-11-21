@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import { USER_CONFIG_QUERY_KEY, useUserConfig } from '@/lib/auth';
 import {
   ACCOUNT_TAB_FIELDS,
   CASH_TAB_FIELDS,
@@ -108,7 +109,8 @@ function FieldChecklist({
 }
 
 export default function BookingCursorPage() {
-  const { user, refreshMe } = useAuth();
+  const qc = useQueryClient();
+  const { data: userConfig } = useUserConfig();
   const [config, setConfig] = useState<BookingTabConfig>(
     defaultBookingTabConfig(),
   );
@@ -117,8 +119,8 @@ export default function BookingCursorPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setConfig(normalizeBookingTabConfig(user?.userInfo?.bookingTabConfig));
-  }, [user?.userInfo?.bookingTabConfig]);
+    setConfig(normalizeBookingTabConfig(userConfig?.bookingTabConfig));
+  }, [userConfig?.bookingTabConfig]);
 
   const save = async () => {
     setSaving(true);
@@ -126,8 +128,8 @@ export default function BookingCursorPage() {
     setError('');
     try {
       const normalized = normalizeBookingTabConfig(config);
-      await api.patch('/auth/profile', { bookingTabConfig: normalized });
-      await refreshMe();
+      await api.patch('/auth/config', { bookingTabConfig: normalized });
+      await qc.invalidateQueries({ queryKey: USER_CONFIG_QUERY_KEY });
       setMessage('Booking cursor saved.');
     } catch (e: unknown) {
       const msg =

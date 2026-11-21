@@ -5,12 +5,18 @@ import {
   Dialog,
   InputNumber,
   InputText,
+  Select,
   Textarea,
   Tag,
 } from '@/components/ui';
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import {
+  USER_CONFIG_QUERY_KEY,
+  useAuth,
+  useUserConfig,
+} from '@/lib/auth';
 import {
   FieldErrors,
   firstError,
@@ -27,6 +33,18 @@ import {
 } from '@/lib/terms-and-conditions';
 import { apiErrorMessage, toastError } from '@/lib/toast';
 import { trimFormData } from '@/lib/trim';
+import {
+  CARGO_PRINT_TEMPLATE_LABELS,
+  CargoPrintTemplate,
+} from '@/shared';
+import { normalizeCargoPrintTemplate } from '@/components/bookings/cargo-receipt-shared';
+
+const CARGO_TEMPLATE_OPTIONS = Object.values(CargoPrintTemplate).map(
+  (value) => ({
+    label: CARGO_PRINT_TEMPLATE_LABELS[value],
+    value,
+  }),
+);
 
 const LOGO_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -55,24 +73,28 @@ interface ProfileFormState {
   bankAccountNo: string;
   bankIfsc: string;
   upiId: string;
-  sgstPercent: number;
-  cgstPercent: number;
-  igstPercent: number;
   address: string;
   city: string;
   state: string;
   pincode: string;
   notes: string;
+}
+
+interface ConfigFormState {
+  sgstPercent: number;
+  cgstPercent: number;
+  igstPercent: number;
   insurancePercent: number;
   paymentDays: number;
   volumetricDivisor: number;
   ewayBillThreshold: number;
+  cargoPrintTemplate: CargoPrintTemplate;
   termsText: string;
 }
 
 type ProfileFieldKey = keyof ProfileFormState;
 
-const OPTIONAL_FIELDS = new Set<ProfileFieldKey>([
+const OPTIONAL_PROFILE_FIELDS = new Set<ProfileFieldKey>([
   'phone',
   'companyName',
   'gstin',
@@ -81,19 +103,11 @@ const OPTIONAL_FIELDS = new Set<ProfileFieldKey>([
   'bankAccountNo',
   'bankIfsc',
   'upiId',
-  'sgstPercent',
-  'cgstPercent',
-  'igstPercent',
   'address',
   'city',
   'state',
   'pincode',
   'notes',
-  'insurancePercent',
-  'paymentDays',
-  'volumetricDivisor',
-  'ewayBillThreshold',
-  'termsText',
 ]);
 
 function validateProfileField(key: ProfileFieldKey, value: string): string {
@@ -111,16 +125,21 @@ function validateProfileForm(form: ProfileFormState): FieldErrors {
 
 export default function ProfilePage() {
   const { user, refreshMe } = useAuth();
+  const { data: cfg } = useUserConfig();
+  const qc = useQueryClient();
   const info = user?.userInfo;
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [smtpOpen, setSmtpOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState('');
   const [smtpSaving, setSmtpSaving] = useState(false);
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [settingsError, setSettingsError] = useState('');
   const [smtpError, setSmtpError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [gmailForm, setGmailForm] = useState<GmailFormState>({
@@ -138,18 +157,21 @@ export default function ProfilePage() {
     bankAccountNo: '',
     bankIfsc: '',
     upiId: '',
-    sgstPercent: 9,
-    cgstPercent: 9,
-    igstPercent: 0,
     address: '',
     city: '',
     state: '',
     pincode: '',
     notes: '',
+  });
+  const [configForm, setConfigForm] = useState<ConfigFormState>({
+    sgstPercent: 9,
+    cgstPercent: 9,
+    igstPercent: 0,
     insurancePercent: 2,
     paymentDays: 10,
     volumetricDivisor: 5000,
     ewayBillThreshold: 50000,
+    cargoPrintTemplate: CargoPrintTemplate.CLASSIC_GRID,
     termsText: '',
   });
 
@@ -166,30 +188,39 @@ export default function ProfilePage() {
       bankAccountNo: info?.bankAccountNo || '',
       bankIfsc: info?.bankIfsc || '',
       upiId: info?.upiId || '',
-      sgstPercent: Number(info?.sgstPercent ?? 9),
-      cgstPercent: Number(info?.cgstPercent ?? 9),
-      igstPercent: Number(info?.igstPercent ?? 0),
       address: info?.address || '',
       city: info?.city || '',
       state: info?.state || '',
       pincode: info?.pincode || '',
       notes: info?.notes || '',
-      insurancePercent: Number(info?.insurancePercent ?? 2),
-      paymentDays: Number(info?.paymentDays ?? 10),
-      volumetricDivisor: Number(info?.volumetricDivisor ?? 5000),
-      ewayBillThreshold: Number(info?.ewayBillThreshold ?? 50000),
-      termsText: termsToEditorText(info?.termsAndConditions),
-    });
-    setGmailForm({
-      gmailEmail:
-        info?.smtpUser || info?.smtpFromEmail || '',
-      appPassword: '',
     });
   }, [user, info]);
+
+  useEffect(() => {
+    if (!cfg) return;
+    setConfigForm({
+      sgstPercent: Number(cfg.sgstPercent ?? 9),
+      cgstPercent: Number(cfg.cgstPercent ?? 9),
+      igstPercent: Number(cfg.igstPercent ?? 0),
+      insurancePercent: Number(cfg.insurancePercent ?? 2),
+      paymentDays: Number(cfg.paymentDays ?? 10),
+      volumetricDivisor: Number(cfg.volumetricDivisor ?? 5000),
+      ewayBillThreshold: Number(cfg.ewayBillThreshold ?? 50000),
+      cargoPrintTemplate: normalizeCargoPrintTemplate(cfg.cargoPrintTemplate),
+      termsText: termsToEditorText(cfg.termsAndConditions),
+    });
+    setGmailForm({
+      gmailEmail: cfg.smtpUser || cfg.smtpFromEmail || '',
+      appPassword: '',
+    });
+  }, [cfg]);
 
   if (!user) {
     return <p className="muted">Loading profile…</p>;
   }
+
+  const invalidateConfig = () =>
+    qc.invalidateQueries({ queryKey: USER_CONFIG_QUERY_KEY });
 
   const openEdit = () => {
     setErrorMessage('');
@@ -197,10 +228,14 @@ export default function ProfilePage() {
     setEditOpen(true);
   };
 
+  const openSettings = () => {
+    setSettingsError('');
+    setSettingsOpen(true);
+  };
+
   const openLogoPicker = () => {
     const input = logoInputRef.current;
     if (!input || logoBusy) return;
-    // Reset so picking the same file again still fires change.
     input.value = '';
     input.click();
   };
@@ -255,7 +290,7 @@ export default function ProfilePage() {
   const openSmtpEdit = () => {
     setSmtpError('');
     setGmailForm({
-      gmailEmail: info?.smtpUser || info?.smtpFromEmail || '',
+      gmailEmail: cfg?.smtpUser || cfg?.smtpFromEmail || '',
       appPassword: '',
     });
     setSmtpOpen(true);
@@ -273,7 +308,7 @@ export default function ProfilePage() {
         return;
       }
       const password = normalizeGmailAppPassword(gmailForm.appPassword);
-      if (!info?.smtpConfigured && !password) {
+      if (!cfg?.smtpConfigured && !password) {
         setSmtpError('Google App Password is required');
         setSmtpSaving(false);
         return;
@@ -296,11 +331,11 @@ export default function ProfilePage() {
       if (password) {
         payload.smtpPassword = password;
       }
-      await api.patch('/auth/profile', payload, {
+      await api.patch('/auth/config', payload, {
         toastSummary: 'Gmail saved',
         toastDetail: 'Quotations and invoices can be emailed from this Gmail.',
       });
-      await refreshMe();
+      await invalidateConfig();
       setSmtpOpen(false);
     } catch (err: unknown) {
       setSmtpError(apiErrorMessage(err, 'Failed to save Gmail settings'));
@@ -314,14 +349,14 @@ export default function ProfilePage() {
     setSmtpError('');
     try {
       await api.patch(
-        '/auth/profile',
+        '/auth/config',
         { smtpHost: null },
         {
           toastSummary: 'Gmail disconnected',
-          toastDetail: 'Outgoing email was removed from this profile.',
+          toastDetail: 'Outgoing email was removed from settings.',
         },
       );
-      await refreshMe();
+      await invalidateConfig();
       setSmtpOpen(false);
     } catch (err: unknown) {
       setSmtpError(apiErrorMessage(err, 'Failed to disconnect Gmail'));
@@ -346,7 +381,7 @@ export default function ProfilePage() {
   };
 
   const blurField = (key: ProfileFieldKey) => {
-    if (OPTIONAL_FIELDS.has(key)) return;
+    if (OPTIONAL_PROFILE_FIELDS.has(key)) return;
     const msg = validateProfileField(key, String(form[key] ?? ''));
     setFieldErrors((prev) => ({ ...prev, [key]: msg }));
   };
@@ -374,19 +409,11 @@ export default function ProfilePage() {
         bankAccountNo: cleaned.bankAccountNo || null,
         bankIfsc: cleaned.bankIfsc || null,
         upiId: cleaned.upiId || null,
-        sgstPercent: Number(form.sgstPercent ?? 9),
-        cgstPercent: Number(form.cgstPercent ?? 9),
-        igstPercent: Number(form.igstPercent ?? 0),
         address: cleaned.address || null,
         city: cleaned.city || null,
         state: cleaned.state || null,
         pincode: cleaned.pincode || null,
         notes: cleaned.notes || null,
-        insurancePercent: Number(form.insurancePercent ?? 2),
-        paymentDays: Number(form.paymentDays ?? 10),
-        volumetricDivisor: Number(form.volumetricDivisor ?? 5000),
-        ewayBillThreshold: Number(form.ewayBillThreshold ?? 50000),
-        termsAndConditions: editorTextToTerms(form.termsText),
       });
       await refreshMe();
       setEditOpen(false);
@@ -397,6 +424,36 @@ export default function ProfilePage() {
       setErrorMessage(message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsError('');
+    try {
+      await api.patch(
+        '/auth/config',
+        {
+          sgstPercent: Number(configForm.sgstPercent ?? 9),
+          cgstPercent: Number(configForm.cgstPercent ?? 9),
+          igstPercent: Number(configForm.igstPercent ?? 0),
+          insurancePercent: Number(configForm.insurancePercent ?? 2),
+          paymentDays: Number(configForm.paymentDays ?? 10),
+          volumetricDivisor: Number(configForm.volumetricDivisor ?? 5000),
+          ewayBillThreshold: Number(configForm.ewayBillThreshold ?? 50000),
+          cargoPrintTemplate: configForm.cargoPrintTemplate,
+          termsAndConditions: editorTextToTerms(configForm.termsText),
+        },
+        {
+          toastSummary: 'Settings saved',
+        },
+      );
+      await invalidateConfig();
+      setSettingsOpen(false);
+    } catch (err: unknown) {
+      setSettingsError(apiErrorMessage(err, 'Failed to update settings'));
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -418,8 +475,8 @@ export default function ProfilePage() {
     ['notes', 'Notes'],
   ] as const;
 
-  const termsPreview = info?.termsAndConditions?.length
-    ? info.termsAndConditions
+  const termsPreview = cfg?.termsAndConditions?.length
+    ? cfg.termsAndConditions
     : null;
   const termsCount = termsPreview?.length ?? 'defaults';
 
@@ -427,7 +484,7 @@ export default function ProfilePage() {
     <div>
       <div className="page-header">
         <h1>Profile</h1>
-        <Button label="Edit user information" icon="pi pi-pencil" onClick={openEdit} />
+        <Button label="Edit profile" icon="pi pi-pencil" onClick={openEdit} />
       </div>
 
       <div className="profile-grid">
@@ -501,10 +558,6 @@ export default function ProfilePage() {
                 ) : (
                   <span className="muted">No logo uploaded</span>
                 )}
-                {/*
-                  Avoid display:none — on Windows it often breaks first-select /
-                  double-click in the native file dialog.
-                */}
                 <input
                   id="profile-logo-input"
                   ref={logoInputRef}
@@ -567,12 +620,6 @@ export default function ProfilePage() {
           <InfoRow label="Acc. No." value={info?.bankAccountNo} />
           <InfoRow label="IFSC code" value={info?.bankIfsc} />
           <InfoRow label="UPI ID" value={info?.upiId} />
-          <InfoRow
-            label="SGST / UTGST %"
-            value={String(info?.sgstPercent ?? '9.00')}
-          />
-          <InfoRow label="CGST %" value={String(info?.cgstPercent ?? '9.00')} />
-          <InfoRow label="IGST %" value={String(info?.igstPercent ?? '0.00')} />
           <InfoRow label="Address" value={info?.address} />
           <InfoRow label="City" value={info?.city} />
           <InfoRow label="State" value={info?.state} />
@@ -582,83 +629,54 @@ export default function ProfilePage() {
 
         <section className="panel profile-card" style={{ gridColumn: '1 / -1' }}>
           <div className="profile-card-header">
-            <h2>Gmail (send quotations &amp; invoices)</h2>
-            <div style={{ display: 'flex', gap: '0.35rem' }}>
-              <Button
-                label="Test"
-                icon="pi pi-send"
-                text
-                size="small"
-                disabled={!info?.smtpConfigured}
-                loading={smtpTesting}
-                onClick={() => void testSmtp()}
-              />
-              <Button
-                label={info?.smtpConfigured ? 'Change' : 'Connect Gmail'}
-                icon="pi pi-pencil"
-                text
-                size="small"
-                onClick={openSmtpEdit}
-              />
-            </div>
-          </div>
-          <div className="profile-row">
-            <span className="profile-label">Status</span>
-            <span className="profile-value">
-              <Tag severity={info?.smtpConfigured ? 'success' : 'warning'}>
-                {info?.smtpConfigured ? 'Gmail connected' : 'Not connected'}
-              </Tag>
-            </span>
-          </div>
-          <InfoRow label="Provider" value="Google Gmail" />
-          <InfoRow
-            label="Gmail address"
-            value={info?.smtpUser || info?.smtpFromEmail}
-          />
-          <p className="muted" style={{ margin: '0.75rem 0 0', fontSize: '0.85rem' }}>
-            Only your Google email and a Google App Password are needed.
-            Server settings (smtp.gmail.com : 587) are applied automatically.
-          </p>
-          {smtpError && !smtpOpen ? (
-            <p className="error-text" style={{ marginTop: '0.5rem' }}>
-              {smtpError}
-            </p>
-          ) : null}
-        </section>
-
-        <section className="panel profile-card" style={{ gridColumn: '1 / -1' }}>
-          <div className="profile-card-header">
-            <h2>Terms &amp; conditions</h2>
+            <h2>Settings</h2>
             <Button
-              label="Edit"
-              icon="pi pi-pencil"
+              label="Edit settings"
+              icon="pi pi-cog"
               text
               size="small"
-              onClick={openEdit}
+              onClick={openSettings}
             />
           </div>
+          <p className="muted" style={{ margin: '0 0 0.75rem' }}>
+            Billing rates, cargo print layout, quotation terms, and email.
+          </p>
+          <InfoRow
+            label="SGST / UTGST %"
+            value={String(cfg?.sgstPercent ?? '9.00')}
+          />
+          <InfoRow label="CGST %" value={String(cfg?.cgstPercent ?? '9.00')} />
+          <InfoRow label="IGST %" value={String(cfg?.igstPercent ?? '0.00')} />
+          <InfoRow
+            label="Cargo print template"
+            value={
+              CARGO_PRINT_TEMPLATE_LABELS[
+                normalizeCargoPrintTemplate(cfg?.cargoPrintTemplate)
+              ]
+            }
+          />
           <InfoRow
             label="Payment days"
-            value={String(info?.paymentDays ?? 10)}
+            value={String(cfg?.paymentDays ?? 10)}
           />
           <InfoRow
             label="Insurance %"
-            value={String(info?.insurancePercent ?? '2')}
+            value={String(cfg?.insurancePercent ?? '2')}
           />
           <InfoRow
             label="Volumetric divisor"
-            value={String(info?.volumetricDivisor ?? 5000)}
+            value={String(cfg?.volumetricDivisor ?? 5000)}
           />
           <InfoRow
             label="E-way bill threshold"
             value={
-              info?.ewayBillThreshold != null
-                ? Number(info.ewayBillThreshold).toLocaleString('en-IN')
+              cfg?.ewayBillThreshold != null
+                ? Number(cfg.ewayBillThreshold).toLocaleString('en-IN')
                 : '50,000'
             }
           />
           <InfoRow
-            label="Clauses"
+            label="T&C clauses"
             value={
               typeof termsCount === 'number'
                 ? `${termsCount} custom lines`
@@ -674,18 +692,58 @@ export default function ProfilePage() {
                 <li className="muted">…and {termsPreview.length - 4} more</li>
               ) : null}
             </ul>
-          ) : (
-            <p className="muted" style={{ margin: '0.5rem 0 0' }}>
-              Defaults include payment, restricted items, volumetric weight,
-              GST, FOV, insurance, liability, and fuel surcharge — with
-              placeholders filled at print time.
+          ) : null}
+        </section>
+
+        <section className="panel profile-card" style={{ gridColumn: '1 / -1' }}>
+          <div className="profile-card-header">
+            <h2>Gmail (send quotations &amp; invoices)</h2>
+            <div style={{ display: 'flex', gap: '0.35rem' }}>
+              <Button
+                label="Test"
+                icon="pi pi-send"
+                text
+                size="small"
+                disabled={!cfg?.smtpConfigured}
+                loading={smtpTesting}
+                onClick={() => void testSmtp()}
+              />
+              <Button
+                label={cfg?.smtpConfigured ? 'Change' : 'Connect Gmail'}
+                icon="pi pi-pencil"
+                text
+                size="small"
+                onClick={openSmtpEdit}
+              />
+            </div>
+          </div>
+          <div className="profile-row">
+            <span className="profile-label">Status</span>
+            <span className="profile-value">
+              <Tag severity={cfg?.smtpConfigured ? 'success' : 'warning'}>
+                {cfg?.smtpConfigured ? 'Gmail connected' : 'Not connected'}
+              </Tag>
+            </span>
+          </div>
+          <InfoRow label="Provider" value="Google Gmail" />
+          <InfoRow
+            label="Gmail address"
+            value={cfg?.smtpUser || cfg?.smtpFromEmail}
+          />
+          <p className="muted" style={{ margin: '0.75rem 0 0', fontSize: '0.85rem' }}>
+            Only your Google email and a Google App Password are needed.
+            Server settings (smtp.gmail.com : 587) are applied automatically.
+          </p>
+          {smtpError && !smtpOpen ? (
+            <p className="error-text" style={{ marginTop: '0.5rem' }}>
+              {smtpError}
             </p>
-          )}
+          ) : null}
         </section>
       </div>
 
       <Dialog
-        header="Edit user information"
+        header="Edit profile"
         visible={editOpen}
         style={{ width: 'min(720px, 95vw)' }}
         onHide={() => setEditOpen(false)}
@@ -721,12 +779,32 @@ export default function ProfilePage() {
               </div>
             );
           })}
+        </div>
+        {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+          <Button
+            label="Cancel"
+            severity="secondary"
+            text
+            onClick={() => setEditOpen(false)}
+          />
+          <Button label="Save changes" loading={saving} onClick={saveProfile} />
+        </div>
+      </Dialog>
+
+      <Dialog
+        header="Edit settings"
+        visible={settingsOpen}
+        style={{ width: 'min(720px, 95vw)' }}
+        onHide={() => setSettingsOpen(false)}
+      >
+        <div className="form-grid">
           <div className="field">
             <label>SGST / UTGST %</label>
             <InputNumber
-              value={form.sgstPercent}
+              value={configForm.sgstPercent}
               onValueChange={(e) =>
-                setForm((prev) => ({
+                setConfigForm((prev) => ({
                   ...prev,
                   sgstPercent: Number(e.value ?? 0),
                 }))
@@ -742,9 +820,9 @@ export default function ProfilePage() {
           <div className="field">
             <label>CGST %</label>
             <InputNumber
-              value={form.cgstPercent}
+              value={configForm.cgstPercent}
               onValueChange={(e) =>
-                setForm((prev) => ({
+                setConfigForm((prev) => ({
                   ...prev,
                   cgstPercent: Number(e.value ?? 0),
                 }))
@@ -760,9 +838,9 @@ export default function ProfilePage() {
           <div className="field">
             <label>IGST %</label>
             <InputNumber
-              value={form.igstPercent}
+              value={configForm.igstPercent}
               onValueChange={(e) =>
-                setForm((prev) => ({
+                setConfigForm((prev) => ({
                   ...prev,
                   igstPercent: Number(e.value ?? 0),
                 }))
@@ -787,9 +865,9 @@ export default function ProfilePage() {
           <div className="field">
             <label>Payment days</label>
             <InputNumber
-              value={form.paymentDays}
+              value={configForm.paymentDays}
               onValueChange={(e) =>
-                setForm((prev) => ({
+                setConfigForm((prev) => ({
                   ...prev,
                   paymentDays: Number(e.value ?? 10),
                 }))
@@ -803,9 +881,9 @@ export default function ProfilePage() {
           <div className="field">
             <label>Insurance %</label>
             <InputNumber
-              value={form.insurancePercent}
+              value={configForm.insurancePercent}
               onValueChange={(e) =>
-                setForm((prev) => ({
+                setConfigForm((prev) => ({
                   ...prev,
                   insurancePercent: Number(e.value ?? 2),
                 }))
@@ -821,9 +899,9 @@ export default function ProfilePage() {
           <div className="field">
             <label>Volumetric divisor</label>
             <InputNumber
-              value={form.volumetricDivisor}
+              value={configForm.volumetricDivisor}
               onValueChange={(e) =>
-                setForm((prev) => ({
+                setConfigForm((prev) => ({
                   ...prev,
                   volumetricDivisor: Number(e.value ?? 5000),
                 }))
@@ -837,9 +915,9 @@ export default function ProfilePage() {
           <div className="field">
             <label>E-way bill threshold (₹)</label>
             <InputNumber
-              value={form.ewayBillThreshold}
+              value={configForm.ewayBillThreshold}
               onValueChange={(e) =>
-                setForm((prev) => ({
+                setConfigForm((prev) => ({
                   ...prev,
                   ewayBillThreshold: Number(e.value ?? 50000),
                 }))
@@ -850,12 +928,34 @@ export default function ProfilePage() {
             />
           </div>
           <div className="field full">
+            <label>Cargo print template</label>
+            <Select
+              value={configForm.cargoPrintTemplate}
+              options={CARGO_TEMPLATE_OPTIONS}
+              onChange={(e) =>
+                setConfigForm((prev) => ({
+                  ...prev,
+                  cargoPrintTemplate: normalizeCargoPrintTemplate(
+                    String(e.value || ''),
+                  ),
+                }))
+              }
+              style={{ width: '100%' }}
+            />
+            <p className="muted" style={{ margin: '0.35rem 0 0', fontSize: '0.8rem' }}>
+              Classic grid · Bold bands · Compact portrait · Ledger
+            </p>
+          </div>
+          <div className="field full">
             <label htmlFor="termsText">Clauses (one per line)</label>
             <Textarea
               id="termsText"
-              value={form.termsText}
+              value={configForm.termsText}
               onChange={(e) =>
-                setForm((prev) => ({ ...prev, termsText: e.target.value }))
+                setConfigForm((prev) => ({
+                  ...prev,
+                  termsText: e.target.value,
+                }))
               }
               rows={14}
               autoResize
@@ -863,15 +963,19 @@ export default function ProfilePage() {
             />
           </div>
         </div>
-        {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+        {settingsError ? <p className="error-text">{settingsError}</p> : null}
         <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
           <Button
             label="Cancel"
             severity="secondary"
             text
-            onClick={() => setEditOpen(false)}
+            onClick={() => setSettingsOpen(false)}
           />
-          <Button label="Save changes" loading={saving} onClick={saveProfile} />
+          <Button
+            label="Save settings"
+            loading={settingsSaving}
+            onClick={() => void saveSettings()}
+          />
         </div>
       </Dialog>
 
@@ -927,7 +1031,7 @@ export default function ProfilePage() {
               type="password"
               value={gmailForm.appPassword}
               placeholder={
-                info?.smtpConfigured
+                cfg?.smtpConfigured
                   ? 'Leave blank to keep current password'
                   : 'xxxx xxxx xxxx xxxx'
               }
@@ -952,7 +1056,7 @@ export default function ProfilePage() {
             flexWrap: 'wrap',
           }}
         >
-          {info?.smtpConfigured ? (
+          {cfg?.smtpConfigured ? (
             <Button
               label="Disconnect"
               severity="danger"

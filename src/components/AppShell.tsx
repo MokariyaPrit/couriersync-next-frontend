@@ -56,6 +56,22 @@ const NAV: NavGroup[] = [
           p === '/bookings/cash' || p.startsWith('/bookings/cash/'),
       },
       {
+        href: '/bookings/cargo/account',
+        label: 'Account booking (C)',
+        roles: [Role.ADMIN, Role.BRANCH_MANAGER],
+        match: (p) =>
+          p === '/bookings/cargo/account' ||
+          p.startsWith('/bookings/cargo/account/'),
+      },
+      {
+        href: '/bookings/cargo/cash',
+        label: 'Cash booking (C)',
+        roles: [Role.ADMIN, Role.BRANCH_MANAGER],
+        match: (p) =>
+          p === '/bookings/cargo/cash' ||
+          p.startsWith('/bookings/cargo/cash/'),
+      },
+      {
         href: '/booking-list',
         label: 'Booking list',
         roles: [Role.ADMIN, Role.BRANCH_MANAGER],

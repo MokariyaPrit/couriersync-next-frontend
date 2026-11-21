@@ -55,20 +55,23 @@ interface UserInfoFields {
   bankAccountNo: string | null;
   bankIfsc: string | null;
   upiId: string | null;
-  sgstPercent: string | number | null;
-  cgstPercent: string | number | null;
-  igstPercent: string | number | null;
   address: string | null;
   city: string | null;
   state: string | null;
   pincode: string | null;
   notes: string | null;
+  expiredOn?: string | null;
+}
+
+interface UserConfigFields {
+  sgstPercent?: string | number | null;
+  cgstPercent?: string | number | null;
+  igstPercent?: string | number | null;
   termsAndConditions?: string[] | null;
   insurancePercent?: string | number | null;
   paymentDays?: number | null;
   volumetricDivisor?: number | null;
   ewayBillThreshold?: string | number | null;
-  expiredOn?: string | null;
 }
 
 interface UserRow {
@@ -77,6 +80,7 @@ interface UserRow {
   role: Role;
   isActive: boolean;
   userInfo?: UserInfoFields | null;
+  userConfig?: UserConfigFields | null;
 }
 
 interface UserFormState {
@@ -178,19 +182,19 @@ function toFormFromUser(user: UserRow): UserFormState {
     bankAccountNo: user.userInfo?.bankAccountNo || '',
     bankIfsc: user.userInfo?.bankIfsc || '',
     upiId: user.userInfo?.upiId || '',
-    sgstPercent: Number(user.userInfo?.sgstPercent ?? 9),
-    cgstPercent: Number(user.userInfo?.cgstPercent ?? 9),
-    igstPercent: Number(user.userInfo?.igstPercent ?? 0),
+    sgstPercent: Number(user.userConfig?.sgstPercent ?? 9),
+    cgstPercent: Number(user.userConfig?.cgstPercent ?? 9),
+    igstPercent: Number(user.userConfig?.igstPercent ?? 0),
     address: user.userInfo?.address || '',
     city: user.userInfo?.city || '',
     state: user.userInfo?.state || '',
     pincode: user.userInfo?.pincode || '',
     notes: user.userInfo?.notes || '',
-    insurancePercent: Number(user.userInfo?.insurancePercent ?? 2),
-    paymentDays: Number(user.userInfo?.paymentDays ?? 10),
-    volumetricDivisor: Number(user.userInfo?.volumetricDivisor ?? 5000),
-    ewayBillThreshold: Number(user.userInfo?.ewayBillThreshold ?? 50000),
-    termsText: termsToEditorText(user.userInfo?.termsAndConditions),
+    insurancePercent: Number(user.userConfig?.insurancePercent ?? 2),
+    paymentDays: Number(user.userConfig?.paymentDays ?? 10),
+    volumetricDivisor: Number(user.userConfig?.volumetricDivisor ?? 5000),
+    ewayBillThreshold: Number(user.userConfig?.ewayBillThreshold ?? 50000),
+    termsText: termsToEditorText(user.userConfig?.termsAndConditions),
     expiredOn: user.userInfo?.expiredOn
       ? String(user.userInfo.expiredOn).slice(0, 10)
       : '',

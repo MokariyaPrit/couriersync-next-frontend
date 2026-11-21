@@ -1,6 +1,6 @@
 'use client';
 
-import { BOOKING_TYPE_LABELS, BookingType } from '@/shared';
+import { BOOKING_TYPE_LABELS, BookingType, ShipmentKind } from '@/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, ConfirmDialog, confirmDialog, Dialog } from '@/components/ui';
@@ -83,14 +83,26 @@ function weightGrams(value: string | number | null | undefined) {
   return String(Math.round(kg * 1000));
 }
 
-function modePath(mode: BookingType) {
+function modePath(mode: BookingType, shipmentKind: ShipmentKind) {
+  if (shipmentKind === ShipmentKind.CARGO) {
+    return mode === BookingType.CASH
+      ? '/bookings/cargo/cash'
+      : '/bookings/cargo/account';
+  }
   return mode === BookingType.CASH ? '/bookings/cash' : '/bookings/account';
 }
 
-export function BookingsPageView({ mode }: { mode: BookingType }) {
+export function BookingsPageView({
+  mode,
+  shipmentKind = ShipmentKind.REGULAR,
+}: {
+  mode: BookingType;
+  shipmentKind?: ShipmentKind;
+}) {
   const qc = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isCargo = shipmentKind === ShipmentKind.CARGO;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
@@ -99,11 +111,11 @@ export function BookingsPageView({ mode }: { mode: BookingType }) {
     const editId = searchParams.get('edit')?.trim();
     if (!editId) return;
     setEditingId(editId);
-    router.replace(modePath(mode));
-  }, [searchParams, mode, router]);
+    router.replace(modePath(mode, shipmentKind));
+  }, [searchParams, mode, shipmentKind, router]);
 
   const recentQuery = useQuery({
-    queryKey: ['consignments-recent', mode],
+    queryKey: ['consignments-recent', mode, shipmentKind],
     queryFn: () =>
       fetchPaginated<ConsignmentRow>('/consignments', {
         page: 1,
@@ -112,6 +124,7 @@ export function BookingsPageView({ mode }: { mode: BookingType }) {
         sortOrder: 'DESC',
         mine: true,
         bookingType: mode,
+        shipmentKind,
       }),
   });
 
@@ -159,7 +172,13 @@ export function BookingsPageView({ mode }: { mode: BookingType }) {
       )
     : '0.00';
   const title =
-    mode === BookingType.ACCOUNT ? 'Account booking' : 'Cash booking';
+    mode === BookingType.ACCOUNT
+      ? isCargo
+        ? 'Account booking (C)'
+        : 'Account booking'
+      : isCargo
+        ? 'Cash booking (C)'
+        : 'Cash booking';
   const isCashView = mode === BookingType.CASH;
 
   return (
@@ -172,25 +191,21 @@ export function BookingsPageView({ mode }: { mode: BookingType }) {
       <div className="bookings-split">
         <BookingFormPanel
           mode={mode}
+          shipmentKind={shipmentKind}
           editingId={editingId}
           variant="page"
           showRemember
           onEditingChange={setEditingId}
           onCancel={() => setEditingId(null)}
-          onSaved={(info) => {
-            if (!info.created || !info.id) return;
-            confirmDialog({
-              header: 'Print receipt?',
-              message: 'Open the booking receipt for printing?',
-              acceptLabel: 'Print',
-              rejectLabel: 'Not now',
-              accept: () => router.push(`/bookings/${info.id}/print`),
-            });
-          }}
         />
 
         <aside className="bookings-split-recent panel">
-          <h2>Recent {BOOKING_TYPE_LABELS[mode].toLowerCase()}</h2>
+          <h2>
+            Recent{' '}
+            {isCargo
+              ? `${BOOKING_TYPE_LABELS[mode].toLowerCase()} cargo`
+              : BOOKING_TYPE_LABELS[mode].toLowerCase()}
+          </h2>
           <p className="muted" style={{ marginTop: 0 }}>
             Last {recentQuery.data?.data?.length ?? 0} of yours
           </p>

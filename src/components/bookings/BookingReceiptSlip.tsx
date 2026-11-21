@@ -1,6 +1,6 @@
 'use client';
 
-import { BookingType } from '@/shared';
+import { BookingType, ShipmentKind } from '@/shared';
 import { mediaUrl } from '@/lib/media-url';
 import { serviceTypeLabel } from '@/lib/quotations';
 
@@ -9,6 +9,7 @@ export type BookingReceiptDoc = {
     id: string;
     awb: string;
     bookingType: BookingType;
+    shipmentKind?: ShipmentKind;
     bookingDate: string | null;
     createdAt: string;
     senderName: string;

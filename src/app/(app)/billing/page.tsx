@@ -6,7 +6,7 @@ import { Button, InputNumber, InputText } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { api, unwrap } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useUserConfig } from '@/lib/auth';
 import { fetchPaginated } from '@/lib/list';
 import { ownerDisplayName } from '@/lib/owner-display';
 
@@ -39,6 +39,7 @@ function firstOfMonthIso() {
 export default function GenerateBillPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { data: userConfig } = useUserConfig();
   const qc = useQueryClient();
   const [billDate, setBillDate] = useState(todayIso);
   const [dateFrom, setDateFrom] = useState(firstOfMonthIso);
@@ -51,12 +52,11 @@ export default function GenerateBillPage() {
   const isAdmin = user?.role === Role.ADMIN;
 
   useEffect(() => {
-    const info = user?.userInfo;
-    if (!info) return;
-    setSgstPercent(Number(info.sgstPercent ?? 9));
-    setCgstPercent(Number(info.cgstPercent ?? 9));
-    setIgstPercent(Number(info.igstPercent ?? 0));
-  }, [user?.userInfo]);
+    if (!userConfig) return;
+    setSgstPercent(Number(userConfig.sgstPercent ?? 9));
+    setCgstPercent(Number(userConfig.cgstPercent ?? 9));
+    setIgstPercent(Number(userConfig.igstPercent ?? 0));
+  }, [userConfig]);
 
   const customersQuery = useQuery({
     queryKey: ['customers-billing-generate'],

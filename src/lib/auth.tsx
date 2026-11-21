@@ -1,6 +1,7 @@
 'use client';
 
 import { Role } from '@/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
   useCallback,
@@ -10,6 +11,7 @@ import {
 } from 'react';
 import { api, unwrap } from './api';
 
+/** Lean profile / letterhead from GET /auth/me */
 export interface UserInfoProfile {
   id: string;
   fullName: string;
@@ -28,21 +30,26 @@ export interface UserInfoProfile {
   bankAccountNo: string | null;
   bankIfsc: string | null;
   upiId: string | null;
+  notes: string | null;
+  isActive: boolean;
+  /** Last day account may log in; view-only for branch managers */
+  expiredOn?: string | null;
+}
+
+/** Preferences / integrations from GET /auth/config */
+export interface UserConfigProfile {
+  id: string;
+  userId: string;
   sgstPercent: string | number | null;
   cgstPercent: string | number | null;
   igstPercent: string | number | null;
-  notes: string | null;
   bookingTabConfig?: { account: string[]; cash: string[] } | null;
-  /** Quotation T&C lines; null = system defaults with {{placeholders}} */
   termsAndConditions?: string[] | null;
   insurancePercent?: string | number | null;
   paymentDays?: number | null;
   volumetricDivisor?: number | null;
   ewayBillThreshold?: string | number | null;
-  isActive: boolean;
-  /** Last day account may log in; view-only for branch managers */
-  expiredOn?: string | null;
-  /** Outgoing SMTP (password never returned) */
+  cargoPrintTemplate?: string | null;
   smtpHost?: string | null;
   smtpPort?: number | null;
   smtpSecure?: boolean;
@@ -60,6 +67,8 @@ export interface SessionUser {
   userInfo?: UserInfoProfile | null;
 }
 
+export const USER_CONFIG_QUERY_KEY = ['user-config'] as const;
+
 interface AuthContextValue {
   user: SessionUser | null;
   loading: boolean;
@@ -73,6 +82,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
 
   const refreshMe = useCallback(async () => {
     try {
@@ -92,11 +102,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const { data } = await api.post('/auth/login', { email, password });
     setUser(unwrap<SessionUser>(data));
+    await qc.invalidateQueries({ queryKey: USER_CONFIG_QUERY_KEY });
   };
 
   const logout = async () => {
     await api.post('/auth/logout');
     setUser(null);
+    qc.removeQueries({ queryKey: USER_CONFIG_QUERY_KEY });
   };
 
   return (
@@ -112,4 +124,20 @@ export function useAuth() {
     throw new Error('useAuth must be used within AuthProvider');
   }
   return ctx;
+}
+
+/** Prefs / SMTP / print template — load when booking or settings need them */
+export function useUserConfig(options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+  const enabled = (options?.enabled ?? true) && Boolean(user?.id);
+
+  return useQuery({
+    queryKey: USER_CONFIG_QUERY_KEY,
+    enabled,
+    queryFn: async () => {
+      const { data } = await api.get('/auth/config');
+      return unwrap<UserConfigProfile>(data);
+    },
+    staleTime: 60_000,
+  });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { BookingType } from '@/shared';
+import { BookingType, ShipmentKind } from '@/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, unwrap } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useUserConfig } from '@/lib/auth';
 import { fetchPaginated } from '@/lib/list';
 import {
   resolveRate,
@@ -102,11 +102,19 @@ const DEFAULT_REMEMBER_FLAGS: RememberFlags = {
   weight: false,
 };
 
-function rememberStorageKey(userId: string, mode: BookingType) {
-  return `booking-remember:${userId}:${mode}`;
+function rememberStorageKey(
+  userId: string,
+  mode: BookingType,
+  shipmentKind: ShipmentKind,
+) {
+  return `booking-remember:${userId}:${mode}:${shipmentKind}`;
 }
 
-function loadRememberState(userId: string, mode: BookingType): {
+function loadRememberState(
+  userId: string,
+  mode: BookingType,
+  shipmentKind: ShipmentKind,
+): {
   flags: RememberFlags;
   values: RememberedValues;
 } {
@@ -114,7 +122,9 @@ function loadRememberState(userId: string, mode: BookingType): {
     return { flags: { ...DEFAULT_REMEMBER_FLAGS }, values: {} };
   }
   try {
-    const raw = window.localStorage.getItem(rememberStorageKey(userId, mode));
+    const raw = window.localStorage.getItem(
+      rememberStorageKey(userId, mode, shipmentKind),
+    );
     if (!raw) return { flags: { ...DEFAULT_REMEMBER_FLAGS }, values: {} };
     const parsed = JSON.parse(raw) as {
       flags?: Partial<RememberFlags>;
@@ -132,12 +142,13 @@ function loadRememberState(userId: string, mode: BookingType): {
 function saveRememberState(
   userId: string,
   mode: BookingType,
+  shipmentKind: ShipmentKind,
   flags: RememberFlags,
   values: RememberedValues,
 ) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(
-    rememberStorageKey(userId, mode),
+    rememberStorageKey(userId, mode, shipmentKind),
     JSON.stringify({ flags, values }),
   );
 }
@@ -176,7 +187,17 @@ type BookingFormState = {
   destLabel: string;
   documentNumber: string;
   weightGrams: number;
+  /** Regular: price; Cargo: gross amount before extras */
   freight: number;
+  numberOfBoxes: number;
+  otherChargeLabel: string;
+  otherChargeAmt: number;
+  fuelChargePercent: number;
+  parcelValue: number;
+  insuranceEnabled: boolean;
+  insurancePercent: number;
+  ewayBillEnabled: boolean;
+  ewayBillPercent: number;
   cgst: number;
   sgst: number;
   igst: number;
@@ -317,6 +338,7 @@ interface ConsignmentDetail {
   id: string;
   awb: string;
   bookingType: BookingType;
+  shipmentKind?: ShipmentKind;
   bookingDate?: string | null;
   customerId?: string | null;
   customer?: { id?: string; name?: string } | null;
@@ -351,6 +373,19 @@ interface ConsignmentDetail {
   cgst?: string | number | null;
   sgst?: string | number | null;
   igst?: string | number | null;
+  numberOfBoxes?: number | null;
+  grossAmt?: string | number | null;
+  otherChargeLabel?: string | null;
+  otherChargeAmt?: string | number | null;
+  fuelChargePercent?: string | number | null;
+  fuelChargeAmt?: string | number | null;
+  insuranceEnabled?: boolean;
+  insurancePercent?: string | number | null;
+  insuranceAmt?: string | number | null;
+  ewayBillEnabled?: boolean;
+  ewayBillPercent?: string | number | null;
+  ewayBillAmt?: string | number | null;
+  parcelValue?: string | number | null;
   remarks?: string | null;
 }
 
@@ -449,6 +484,15 @@ const emptyForm = {
   documentNumber: '',
   weightGrams: 100,
   freight: 0,
+  numberOfBoxes: 0,
+  otherChargeLabel: '',
+  otherChargeAmt: 0,
+  fuelChargePercent: 0,
+  parcelValue: 0,
+  insuranceEnabled: false,
+  insurancePercent: 2,
+  ewayBillEnabled: false,
+  ewayBillPercent: 0.2,
   cgst: 0,
   sgst: 0,
   igst: 0,
@@ -457,6 +501,7 @@ const emptyForm = {
 
 export type BookingFormPanelProps = {
   mode: BookingType;
+  shipmentKind?: ShipmentKind;
   editingId?: string | null;
   variant?: 'page' | 'dialog';
   showRemember?: boolean;
@@ -467,6 +512,7 @@ export type BookingFormPanelProps = {
 
 export function BookingFormPanel({
   mode,
+  shipmentKind = ShipmentKind.REGULAR,
   editingId: editingIdProp = null,
   variant = 'page',
   showRemember = true,
@@ -474,11 +520,15 @@ export function BookingFormPanel({
   onSaved,
   onEditingChange,
 }: BookingFormPanelProps) {
+  const isCargo = shipmentKind === ShipmentKind.CARGO;
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { data: userConfig } = useUserConfig();
   const userId = user?.id || 'anon';
+  const defaultInsurancePercent =
+    Number(userConfig?.insurancePercent ?? 2) || 2;
   const isDialog = variant === 'dialog';
-  const tabConfig = user?.userInfo?.bookingTabConfig as
+  const tabConfig = userConfig?.bookingTabConfig as
     | BookingTabConfig
     | null
     | undefined;
@@ -589,6 +639,8 @@ export function BookingFormPanel({
       ...emptyForm,
       bookingType: mode,
       bookingDate: todayIso(),
+      insurancePercent: defaultInsurancePercent,
+      ewayBillPercent: 0.2,
       courierCompanyId: defaultCourierCompany.courierCompanyId,
       courierCompanyLabel: defaultCourierCompany.courierCompanyLabel,
     };
@@ -625,7 +677,7 @@ export function BookingFormPanel({
         // keep old values in storage until next save; only flags matter for apply
       }
       setRememberedValues(nextValues);
-      saveRememberState(userId, mode, nextFlags, nextValues);
+      saveRememberState(userId, mode, shipmentKind, nextFlags, nextValues);
       return nextFlags;
     });
   };
@@ -634,7 +686,7 @@ export function BookingFormPanel({
     // Skip hydrate while editing (page or dialog)
     if (editingIdProp || editingId) return;
 
-    const stored = loadRememberState(userId, mode);
+    const stored = loadRememberState(userId, mode, shipmentKind);
     setRememberFlags(stored.flags);
     setRememberedValues(stored.values);
 
@@ -642,6 +694,8 @@ export function BookingFormPanel({
       ...emptyForm,
       bookingType: mode,
       bookingDate: todayIso(),
+      insurancePercent: defaultInsurancePercent,
+      ewayBillPercent: 0.2,
       courierCompanyId: defaultCourierCompany.courierCompanyId,
       courierCompanyLabel: defaultCourierCompany.courierCompanyLabel,
     };
@@ -660,8 +714,8 @@ export function BookingFormPanel({
     setEditingId(null);
     setEditingAwb('');
     focusStartField();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate remember + reset when mode/user changes
-  }, [userId, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate remember + reset when mode/user/shipment changes
+  }, [userId, mode, shipmentKind, defaultInsurancePercent]);
 
   useEffect(() => {
     if (editingId) return;
@@ -817,15 +871,62 @@ export function BookingFormPanel({
   const isPriceAuto =
     !priceManual || Number(form.freight) === Number(resolvedPrice.amount);
 
-  const cgstPercent = Number(user?.userInfo?.cgstPercent ?? 9);
-  const sgstPercent = Number(user?.userInfo?.sgstPercent ?? 9);
+  const cgstPercent = Number(userConfig?.cgstPercent ?? 9);
+  const sgstPercent = Number(userConfig?.sgstPercent ?? 9);
+
+  const cargoCharges = useMemo(() => {
+    const gross = Math.max(0, Number(form.freight) || 0);
+    const other = Math.max(0, Number(form.otherChargeAmt) || 0);
+    const fuelPct = Math.max(0, Number(form.fuelChargePercent) || 0);
+    const fuelAmt = roundMoney((gross * fuelPct) / 100);
+    const parcel = Math.max(0, Number(form.parcelValue) || 0);
+    const insurancePct = Math.max(0, Number(form.insurancePercent) || 0);
+    const ewayPct = Math.max(0, Number(form.ewayBillPercent) || 0);
+    const insurance = form.insuranceEnabled
+      ? roundMoney((parcel * insurancePct) / 100)
+      : 0;
+    const eway = form.ewayBillEnabled
+      ? roundMoney((parcel * ewayPct) / 100)
+      : 0;
+    const subtotal = roundMoney(gross + other + fuelAmt + insurance + eway);
+    return {
+      gross,
+      other,
+      fuelPct,
+      fuelAmt,
+      parcel,
+      insurancePct,
+      ewayPct,
+      insurance,
+      eway,
+      subtotal,
+    };
+  }, [
+    form.freight,
+    form.otherChargeAmt,
+    form.fuelChargePercent,
+    form.parcelValue,
+    form.insuranceEnabled,
+    form.insurancePercent,
+    form.ewayBillEnabled,
+    form.ewayBillPercent,
+  ]);
 
   const gstSplit = useMemo(() => {
     if (mode !== BookingType.CASH || !gstInclusive) {
       return null;
     }
-    return splitInclusiveGst(form.freight, cgstPercent, sgstPercent);
-  }, [mode, gstInclusive, form.freight, cgstPercent, sgstPercent]);
+    const baseForGst = isCargo ? cargoCharges.subtotal : form.freight;
+    return splitInclusiveGst(baseForGst, cgstPercent, sgstPercent);
+  }, [
+    mode,
+    gstInclusive,
+    isCargo,
+    cargoCharges.subtotal,
+    form.freight,
+    cgstPercent,
+    sgstPercent,
+  ]);
 
   // Keep cash GST amounts in sync when inclusive mode is on
   useEffect(() => {
@@ -1062,9 +1163,33 @@ export function BookingFormPanel({
 
     const weightKg = Math.max(0, Number(cleaned.weightGrams || 0) / 1000);
     const freight = Number(cleaned.freight);
+    const gross = Math.max(0, freight);
+    const otherChargeAmt = Math.max(0, Number(cleaned.otherChargeAmt) || 0);
+    const fuelChargePercent = Math.max(
+      0,
+      Number(cleaned.fuelChargePercent) || 0,
+    );
+    const fuelChargeAmt = roundMoney((gross * fuelChargePercent) / 100);
+    const parcelValue = Math.max(0, Number(cleaned.parcelValue) || 0);
+    const insuranceEnabled = Boolean(cleaned.insuranceEnabled);
+    const ewayBillEnabled = Boolean(cleaned.ewayBillEnabled);
+    const insurancePercent = Math.max(0, Number(cleaned.insurancePercent) || 0);
+    const ewayBillPercent = Math.max(0, Number(cleaned.ewayBillPercent) || 0);
+    const insuranceAmt = insuranceEnabled
+      ? roundMoney((parcelValue * insurancePercent) / 100)
+      : 0;
+    const ewayBillAmt = ewayBillEnabled
+      ? roundMoney((parcelValue * ewayBillPercent) / 100)
+      : 0;
+    const cargoSubtotal = isCargo
+      ? roundMoney(
+          gross + otherChargeAmt + fuelChargeAmt + insuranceAmt + ewayBillAmt,
+        )
+      : freight;
+    const billableTotal = isCargo ? cargoSubtotal : freight;
     const cashGstSplit =
       cleaned.bookingType === BookingType.CASH && gstInclusive
-        ? splitInclusiveGst(freight, cgstPercent, sgstPercent)
+        ? splitInclusiveGst(billableTotal, cgstPercent, sgstPercent)
         : null;
 
     const receiverRes = await api.post(
@@ -1112,10 +1237,34 @@ export function BookingFormPanel({
           .join(', ') || senderAddress;
     }
 
+    const cgstAmt =
+      cleaned.bookingType === BookingType.ACCOUNT
+        ? 0
+        : cashGstSplit
+          ? cashGstSplit.cgst
+          : Number(cleaned.cgst) || 0;
+    const sgstAmt =
+      cleaned.bookingType === BookingType.ACCOUNT
+        ? 0
+        : cashGstSplit
+          ? cashGstSplit.sgst
+          : Number(cleaned.sgst) || 0;
+    const igstAmt =
+      cleaned.bookingType === BookingType.ACCOUNT
+        ? 0
+        : cashGstSplit
+          ? 0
+          : Number(cleaned.igst) || 0;
+    // price = billable total (GST-inclusive when Add GST is on)
+    // basePrice = taxable base (equals price when GST is off / exclusive)
+    const price = billableTotal;
+    const basePrice = cashGstSplit ? cashGstSplit.base : billableTotal;
+
     return {
       cleaned,
       payload: {
         bookingType: cleaned.bookingType,
+        shipmentKind,
         bookingDate: cleaned.bookingDate || todayIso(),
         awb: cleaned.documentNumber.trim(),
         customerId:
@@ -1171,28 +1320,30 @@ export function BookingFormPanel({
         receiverCityId: cleaned.receiverCityId || undefined,
         receiverStateId: cleaned.receiverStateId || undefined,
         weightKg,
-        // price = entered rate (GST-inclusive total when Add GST is on)
-        // basePrice = taxable base (equals price when GST is off)
-        price: freight,
-        basePrice: cashGstSplit ? cashGstSplit.base : freight,
-        cgst:
-          cleaned.bookingType === BookingType.ACCOUNT
-            ? 0
-            : cashGstSplit
-              ? cashGstSplit.cgst
-              : Number(cleaned.cgst) || 0,
-        sgst:
-          cleaned.bookingType === BookingType.ACCOUNT
-            ? 0
-            : cashGstSplit
-              ? cashGstSplit.sgst
-              : Number(cleaned.sgst) || 0,
-        igst:
-          cleaned.bookingType === BookingType.ACCOUNT
-            ? 0
-            : cashGstSplit
-              ? 0
-              : Number(cleaned.igst) || 0,
+        price,
+        basePrice,
+        cgst: cgstAmt,
+        sgst: sgstAmt,
+        igst: igstAmt,
+        ...(isCargo
+          ? {
+              numberOfBoxes:
+                Math.max(0, Math.round(Number(cleaned.numberOfBoxes) || 0)) ||
+                undefined,
+              grossAmt: gross,
+              otherChargeLabel: cleaned.otherChargeLabel || undefined,
+              otherChargeAmt: otherChargeAmt || undefined,
+              fuelChargePercent: fuelChargePercent || undefined,
+              fuelChargeAmt: fuelChargeAmt || undefined,
+              parcelValue: parcelValue || undefined,
+              insuranceEnabled,
+              insurancePercent: insuranceEnabled ? insurancePercent : undefined,
+              insuranceAmt: insuranceEnabled ? insuranceAmt : 0,
+              ewayBillEnabled,
+              ewayBillPercent: ewayBillEnabled ? ewayBillPercent : undefined,
+              ewayBillAmt: ewayBillEnabled ? ewayBillAmt : 0,
+            }
+          : {}),
         remarks: cleaned.remarks || undefined,
       },
     };
@@ -1212,8 +1363,12 @@ export function BookingFormPanel({
         toastSummary: 'Success',
         toastDetail:
           cleaned.bookingType === BookingType.ACCOUNT
-            ? 'Account booking created successfully.'
-            : 'Cash booking created successfully.',
+            ? isCargo
+              ? 'Account cargo booking created successfully.'
+              : 'Account booking created successfully.'
+            : isCargo
+              ? 'Cash cargo booking created successfully.'
+              : 'Cash booking created successfully.',
       });
       const created = unwrap<{ id: string }>(res.data);
       return { created: true as const, id: created.id };
@@ -1225,7 +1380,7 @@ export function BookingFormPanel({
           ...snapshotRememberedValues(rememberFlags, form),
         };
         setRememberedValues(nextValues);
-        saveRememberState(userId, mode, rememberFlags, nextValues);
+        saveRememberState(userId, mode, shipmentKind, rememberFlags, nextValues);
         resetForm({ focusStart: !isDialog, rememberedOverride: nextValues });
         onEditingChange?.(null);
         onSaved?.({ created: true, id: result.id });
@@ -1279,6 +1434,14 @@ export function BookingFormPanel({
             : roundMoney(totalPrice + taxTotal)
         : totalPrice;
       const weightGrams = Math.round(Number(detail.weightKg ?? 0) * 1000) || 100;
+      const detailIsCargo =
+        (detail.shipmentKind || shipmentKind) === ShipmentKind.CARGO;
+      const grossFromDetail = Number(detail.grossAmt ?? 0);
+      const freightForForm = detailIsCargo
+        ? grossFromDetail > 0
+          ? grossFromDetail
+          : freight
+        : freight;
 
       setEditingId(detail.id);
       setEditingAwb(detail.awb);
@@ -1322,7 +1485,26 @@ export function BookingFormPanel({
         receiverStateId: detail.receiverStateId || '',
         destLabel: detail.receiverCity || '',
         weightGrams,
-        freight,
+        freight: freightForForm,
+        numberOfBoxes: Number(detail.numberOfBoxes ?? 0) || 0,
+        otherChargeLabel: detail.otherChargeLabel || '',
+        otherChargeAmt: Number(detail.otherChargeAmt ?? 0) || 0,
+        fuelChargePercent: Number(detail.fuelChargePercent ?? 0) || 0,
+        parcelValue: Number(detail.parcelValue ?? 0) || 0,
+        insuranceEnabled:
+          Boolean(detail.insuranceEnabled) ||
+          Number(detail.insuranceAmt ?? 0) > 0,
+        insurancePercent:
+          Number(detail.insurancePercent ?? 0) > 0
+            ? Number(detail.insurancePercent)
+            : defaultInsurancePercent,
+        ewayBillEnabled:
+          Boolean(detail.ewayBillEnabled) ||
+          Number(detail.ewayBillAmt ?? 0) > 0,
+        ewayBillPercent:
+          Number(detail.ewayBillPercent ?? 0) > 0
+            ? Number(detail.ewayBillPercent)
+            : 0.2,
         cgst: cgstAmt,
         sgst: sgstAmt,
         igst: igstAmt,
@@ -1361,8 +1543,12 @@ export function BookingFormPanel({
             {editingId
               ? `Edit booking ${editingAwb}`
               : mode === BookingType.ACCOUNT
-                ? 'New account booking'
-                : 'New cash booking'}
+                ? isCargo
+                  ? 'New account booking (C)'
+                  : 'New account booking'
+                : isCargo
+                  ? 'New cash booking (C)'
+                  : 'New cash booking'}
           </h2>
           <p className="muted" style={{ marginTop: 0 }}>
             Type to search — Tab or Enter selects the first result.
@@ -1624,15 +1810,44 @@ export function BookingFormPanel({
               />
             </div>
 
+            {isCargo ? (
+              <div className="field">
+                <label>Number of boxes</label>
+                <InputNumber
+                  value={form.numberOfBoxes}
+                  tabIndex={ti('numberOfBoxes')}
+                  onValueChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      numberOfBoxes: Math.max(
+                        Math.round(Number(e.value ?? 0)),
+                        0,
+                      ),
+                    }))
+                  }
+                  min={0}
+                  minFractionDigits={0}
+                  maxFractionDigits={0}
+                  useGrouping={false}
+                  style={{ width: '100%' }}
+                  inputStyle={{ width: '100%' }}
+                />
+              </div>
+            ) : null}
+
             <div className="field">
               <label>
-                {gstInclusive
+                {isCargo
                   ? isPriceAuto
-                    ? 'Total price (Auto)'
-                    : 'Total price (Manual)'
-                  : isPriceAuto
-                    ? 'Price (Auto)'
-                    : 'Price (Manual)'}
+                    ? 'Gross amt (Auto)'
+                    : 'Gross amt (Manual)'
+                  : gstInclusive
+                    ? isPriceAuto
+                      ? 'Total price (Auto)'
+                      : 'Total price (Manual)'
+                    : isPriceAuto
+                      ? 'Price (Auto)'
+                      : 'Price (Manual)'}
               </label>
               <InputNumber
                 value={form.freight}
@@ -1651,6 +1866,224 @@ export function BookingFormPanel({
               />
             </div>
 
+            {isCargo ? (
+              <>
+                <div className="field">
+                  <label>Other charge</label>
+                  <InputText
+                    value={form.otherChargeLabel}
+                    tabIndex={ti('otherChargeLabel')}
+                    placeholder="Label"
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        otherChargeLabel: e.target.value,
+                      }))
+                    }
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Other charge amt</label>
+                  <InputNumber
+                    value={form.otherChargeAmt}
+                    tabIndex={ti('otherChargeAmt')}
+                    onValueChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        otherChargeAmt: Math.max(Number(e.value ?? 0), 0),
+                      }))
+                    }
+                    min={0}
+                    minFractionDigits={0}
+                    maxFractionDigits={2}
+                    style={{ width: '100%' }}
+                    inputStyle={{ width: '100%' }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Fuel charge (%)</label>
+                  <InputNumber
+                    value={form.fuelChargePercent}
+                    tabIndex={ti('fuelChargePercent')}
+                    onValueChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        fuelChargePercent: Math.max(Number(e.value ?? 0), 0),
+                      }))
+                    }
+                    min={0}
+                    minFractionDigits={0}
+                    maxFractionDigits={3}
+                    style={{ width: '100%' }}
+                    inputStyle={{ width: '100%' }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Fuel charge amt</label>
+                  <InputNumber
+                    value={cargoCharges.fuelAmt}
+                    disabled
+                    minFractionDigits={0}
+                    maxFractionDigits={2}
+                    style={{ width: '100%' }}
+                    inputStyle={{ width: '100%' }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Parcel value</label>
+                  <InputNumber
+                    value={form.parcelValue}
+                    tabIndex={ti('parcelValue')}
+                    onValueChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        parcelValue: Math.max(Number(e.value ?? 0), 0),
+                      }))
+                    }
+                    min={0}
+                    minFractionDigits={0}
+                    maxFractionDigits={2}
+                    style={{ width: '100%' }}
+                    inputStyle={{ width: '100%' }}
+                  />
+                </div>
+                <div className="field booking-gst-toggle">
+                  <label htmlFor="cargo-insurance-toggle">Insurance</label>
+                  <div className="booking-gst-toggle-row">
+                    <ToggleSwitch
+                      inputId="cargo-insurance-toggle"
+                      checked={form.insuranceEnabled}
+                      onChange={(e) => {
+                        const on = Boolean(e.value);
+                        setForm((p) => ({
+                          ...p,
+                          insuranceEnabled: on,
+                          insurancePercent:
+                            on && !(Number(p.insurancePercent) > 0)
+                              ? defaultInsurancePercent
+                              : p.insurancePercent,
+                        }));
+                      }}
+                    />
+                    <span className="muted" style={{ fontSize: '0.85rem' }}>
+                      {form.insuranceEnabled
+                        ? `% of parcel value`
+                        : 'Off — no insurance charge'}
+                    </span>
+                  </div>
+                </div>
+                {form.insuranceEnabled ? (
+                  <>
+                    <div className="field">
+                      <label>Insurance (%)</label>
+                      <InputNumber
+                        value={form.insurancePercent}
+                        tabIndex={ti('insuranceAmt')}
+                        onValueChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            insurancePercent: Math.max(
+                              Number(e.value ?? 0),
+                              0,
+                            ),
+                          }))
+                        }
+                        min={0}
+                        minFractionDigits={0}
+                        maxFractionDigits={3}
+                        style={{ width: '100%' }}
+                        inputStyle={{ width: '100%' }}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Insurance amt</label>
+                      <InputNumber
+                        value={cargoCharges.insurance}
+                        disabled
+                        minFractionDigits={0}
+                        maxFractionDigits={2}
+                        style={{ width: '100%' }}
+                        inputStyle={{ width: '100%' }}
+                      />
+                    </div>
+                  </>
+                ) : null}
+                <div className="field booking-gst-toggle">
+                  <label htmlFor="cargo-eway-toggle">E-WayBill</label>
+                  <div className="booking-gst-toggle-row">
+                    <ToggleSwitch
+                      inputId="cargo-eway-toggle"
+                      checked={form.ewayBillEnabled}
+                      onChange={(e) => {
+                        const on = Boolean(e.value);
+                        setForm((p) => ({
+                          ...p,
+                          ewayBillEnabled: on,
+                          ewayBillPercent:
+                            on && !(Number(p.ewayBillPercent) > 0)
+                              ? 0.2
+                              : p.ewayBillPercent,
+                        }));
+                      }}
+                    />
+                    <span className="muted" style={{ fontSize: '0.85rem' }}>
+                      {form.ewayBillEnabled
+                        ? `% of parcel value`
+                        : 'Off — no E-WayBill charge'}
+                    </span>
+                  </div>
+                </div>
+                {form.ewayBillEnabled ? (
+                  <>
+                    <div className="field">
+                      <label>E-WayBill (%)</label>
+                      <InputNumber
+                        value={form.ewayBillPercent}
+                        tabIndex={ti('ewayBillAmt')}
+                        onValueChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            ewayBillPercent: Math.max(
+                              Number(e.value ?? 0),
+                              0,
+                            ),
+                          }))
+                        }
+                        min={0}
+                        minFractionDigits={0}
+                        maxFractionDigits={3}
+                        style={{ width: '100%' }}
+                        inputStyle={{ width: '100%' }}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>E-WayBill amt</label>
+                      <InputNumber
+                        value={cargoCharges.eway}
+                        disabled
+                        minFractionDigits={0}
+                        maxFractionDigits={2}
+                        style={{ width: '100%' }}
+                        inputStyle={{ width: '100%' }}
+                      />
+                    </div>
+                  </>
+                ) : null}
+                <div className="field">
+                  <label>Net amt</label>
+                  <InputNumber
+                    value={cargoCharges.subtotal}
+                    disabled
+                    minFractionDigits={0}
+                    maxFractionDigits={2}
+                    style={{ width: '100%' }}
+                    inputStyle={{ width: '100%' }}
+                  />
+                </div>
+              </>
+            ) : null}
+
             {mode === BookingType.CASH ? (
               <>
                 <div className="field booking-gst-toggle">
@@ -1664,7 +2097,7 @@ export function BookingFormPanel({
                         setGstInclusive(on);
                         if (on) {
                           const split = splitInclusiveGst(
-                            form.freight,
+                            isCargo ? cargoCharges.subtotal : form.freight,
                             cgstPercent,
                             sgstPercent,
                           );
@@ -1686,7 +2119,7 @@ export function BookingFormPanel({
                     />
                     <span className="muted" style={{ fontSize: '0.85rem' }}>
                       {gstInclusive
-                        ? `Split total into base + CGST ${cgstPercent}% + SGST ${sgstPercent}%`
+                        ? `Split ${isCargo ? 'net' : 'total'} into base + CGST ${cgstPercent}% + SGST ${sgstPercent}%`
                         : 'Off — enter tax manually if needed'}
                     </span>
                   </div>
