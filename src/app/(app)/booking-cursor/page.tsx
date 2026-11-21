@@ -8,6 +8,8 @@ import { USER_CONFIG_QUERY_KEY, useUserConfig } from '@/lib/auth';
 import {
   ACCOUNT_TAB_FIELDS,
   CASH_TAB_FIELDS,
+  CARGO_ACCOUNT_TAB_FIELDS,
+  CARGO_CASH_TAB_FIELDS,
   defaultBookingTabConfig,
   normalizeBookingTabConfig,
   type BookingTabConfig,
@@ -149,8 +151,9 @@ export default function BookingCursorPage() {
     <div className="page">
       <h1>Booking cursor</h1>
       <p className="muted" style={{ marginTop: 0, maxWidth: 640 }}>
-        Choose which booking fields Tab should stop on. Create booking always
-        stays in the Tab order after your selected fields.
+        Choose which fields Tab should stop on for regular and cargo booking
+        forms. Create booking always stays in the Tab order after your selected
+        fields.
       </p>
 
       <div
@@ -172,6 +175,20 @@ export default function BookingCursorPage() {
           fields={CASH_TAB_FIELDS}
           selected={config.cash}
           onChange={(cash) => setConfig((p) => ({ ...p, cash }))}
+        />
+        <FieldChecklist
+          title="Cargo account booking"
+          fields={CARGO_ACCOUNT_TAB_FIELDS}
+          selected={config.cargoAccount}
+          onChange={(cargoAccount) =>
+            setConfig((p) => ({ ...p, cargoAccount }))
+          }
+        />
+        <FieldChecklist
+          title="Cargo cash booking"
+          fields={CARGO_CASH_TAB_FIELDS}
+          selected={config.cargoCash}
+          onChange={(cargoCash) => setConfig((p) => ({ ...p, cargoCash }))}
         />
       </div>
 

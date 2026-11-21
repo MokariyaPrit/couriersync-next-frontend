@@ -533,8 +533,8 @@ export function BookingFormPanel({
     | null
     | undefined;
   const ti = (fieldKey: string) =>
-    bookingFieldTabIndex(fieldKey, mode, tabConfig);
-  const actionTi = bookingActionTabIndex(mode, tabConfig);
+    bookingFieldTabIndex(fieldKey, mode, tabConfig, shipmentKind);
+  const actionTi = bookingActionTabIndex(mode, tabConfig, shipmentKind);
 
   const [form, setForm] = useState({ ...emptyForm, bookingType: mode });
   const [error, setError] = useState('');

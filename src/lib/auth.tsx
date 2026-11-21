@@ -43,7 +43,12 @@ export interface UserConfigProfile {
   sgstPercent: string | number | null;
   cgstPercent: string | number | null;
   igstPercent: string | number | null;
-  bookingTabConfig?: { account: string[]; cash: string[] } | null;
+  bookingTabConfig?: {
+    account: string[];
+    cash: string[];
+    cargoAccount?: string[];
+    cargoCash?: string[];
+  } | null;
   termsAndConditions?: string[] | null;
   insurancePercent?: string | number | null;
   paymentDays?: number | null;
