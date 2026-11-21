@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { Button, Dialog } from '@/components/ui';
 import { api, unwrap } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/toast';
@@ -46,6 +47,16 @@ export function BookingTrackDialog({
   const errorMessage = trackQuery.isError
     ? apiErrorMessage(trackQuery.error, 'Failed to fetch live tracking')
     : '';
+  const [updatedLabel, setUpdatedLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!data?.trackedAt) {
+      setUpdatedLabel(null);
+      return;
+    }
+    setUpdatedLabel(
+      new Date(data.trackedAt).toLocaleString('en-IN'),
+    );
+  }, [data?.trackedAt]);
 
   return (
     <Dialog
@@ -102,9 +113,11 @@ export function BookingTrackDialog({
               </ul>
             </div>
           ) : null}
-          <div className="field full muted" style={{ fontSize: '0.85rem' }}>
-            Updated {new Date(data.trackedAt).toLocaleString('en-IN')}
-          </div>
+          {updatedLabel ? (
+            <div className="field full muted" style={{ fontSize: '0.85rem' }}>
+              Updated {updatedLabel}
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div

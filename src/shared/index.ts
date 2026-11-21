@@ -107,12 +107,14 @@ export enum TrackingProvider {
   TIRUPATI = 'TIRUPATI',
   ANJANI = 'ANJANI',
   MAHAVIR = 'MAHAVIR',
+  NANDAN = 'NANDAN',
 }
 
 export const TRACKING_PROVIDER_LABELS: Record<TrackingProvider, string> = {
   [TrackingProvider.TIRUPATI]: 'Shree Tirupati Courier',
   [TrackingProvider.ANJANI]: 'Shree Anjani Courier',
   [TrackingProvider.MAHAVIR]: 'Shree Mahavir Courier',
+  [TrackingProvider.NANDAN]: 'Shree Nandan Courier',
 };
 
 /** Rate template purpose */
