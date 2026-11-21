@@ -106,11 +106,13 @@ export const CARGO_PRINT_TEMPLATE_LABELS: Record<CargoPrintTemplate, string> = {
 export enum TrackingProvider {
   TIRUPATI = 'TIRUPATI',
   ANJANI = 'ANJANI',
+  MAHAVIR = 'MAHAVIR',
 }
 
 export const TRACKING_PROVIDER_LABELS: Record<TrackingProvider, string> = {
   [TrackingProvider.TIRUPATI]: 'Shree Tirupati Courier',
   [TrackingProvider.ANJANI]: 'Shree Anjani Courier',
+  [TrackingProvider.MAHAVIR]: 'Shree Mahavir Courier',
 };
 
 /** Rate template purpose */
