@@ -1,6 +1,10 @@
 'use client';
 
-import { Role } from '@/shared';
+import {
+  Role,
+  TrackingProvider,
+  TRACKING_PROVIDER_LABELS,
+} from '@/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -9,6 +13,7 @@ import {
   DataTable,
   Dialog,
   InputText,
+  Select,
   Tag,
   ToggleSwitch,
   type AppColumn,
@@ -30,6 +35,7 @@ interface CourierCompany {
   id: string;
   name: string;
   companyLink: string | null;
+  trackingProvider?: string | null;
   isActive: boolean;
   isShared?: boolean;
   createdById?: string | null;
@@ -41,14 +47,24 @@ interface CourierCompany {
 type Form = {
   name: string;
   companyLink: string;
+  trackingProvider: string;
   isActive: boolean;
 };
 
 const EMPTY: Form = {
   name: '',
   companyLink: '',
+  trackingProvider: '',
   isActive: true,
 };
+
+const TRACKING_PROVIDER_OPTIONS = [
+  { label: 'None (no in-app track)', value: '' },
+  ...Object.values(TrackingProvider).map((value) => ({
+    label: TRACKING_PROVIDER_LABELS[value],
+    value,
+  })),
+];
 
 const SORT_OPTIONS: SortOption[] = [
   { label: 'Name Asc', sortBy: 'name', sortOrder: 'ASC', isDefault: true },
@@ -61,8 +77,16 @@ function toForm(row: CourierCompany): Form {
   return {
     name: row.name || '',
     companyLink: row.companyLink || '',
+    trackingProvider: row.trackingProvider || '',
     isActive: row.isActive,
   };
+}
+
+function trackingProviderLabel(value?: string | null) {
+  if (!value) return '—';
+  return (
+    TRACKING_PROVIDER_LABELS[value as TrackingProvider] || value
+  );
 }
 
 function isSharedCompany(row: CourierCompany) {
@@ -99,11 +123,19 @@ export default function CourierCompaniesPage() {
     mutationFn: async () => {
       const cleaned = trimFormData(form);
       if (!cleaned.name.trim()) throw new Error('Name is required');
-      const payload = {
+      const payload: {
+        name: string;
+        companyLink?: string;
+        isActive: boolean;
+        trackingProvider?: string | null;
+      } = {
         name: cleaned.name.trim(),
         companyLink: cleaned.companyLink.trim() || undefined,
         isActive: cleaned.isActive,
       };
+      if (user?.role === Role.ADMIN) {
+        payload.trackingProvider = cleaned.trackingProvider.trim() || null;
+      }
       if (editingId) {
         await api.patch(`/courier-companies/${editingId}`, payload);
       } else {
@@ -203,6 +235,10 @@ export default function CourierCompaniesPage() {
           ) : (
             '—'
           ),
+      },
+      {
+        header: 'Tracking',
+        body: (row) => trackingProviderLabel(row.trackingProvider),
       },
       {
         header: 'Scope',
@@ -367,6 +403,23 @@ export default function CourierCompaniesPage() {
               style={{ width: '100%' }}
             />
           </div>
+          {user?.role === Role.ADMIN ? (
+            <div className="field full">
+              <label>Live tracking provider</label>
+              <Select
+                value={form.trackingProvider}
+                options={TRACKING_PROVIDER_OPTIONS}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    trackingProvider: String(e.value ?? ''),
+                  }))
+                }
+                placeholder="None"
+                style={{ width: '100%' }}
+              />
+            </div>
+          ) : null}
           <div className="field">
             <label>Active</label>
             <ToggleSwitch

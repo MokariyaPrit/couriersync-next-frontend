@@ -102,6 +102,15 @@ export const CARGO_PRINT_TEMPLATE_LABELS: Record<CargoPrintTemplate, string> = {
   [CargoPrintTemplate.LEDGER]: 'Ledger',
 };
 
+/** Live tracking adapters for shared courier companies */
+export enum TrackingProvider {
+  TIRUPATI = 'TIRUPATI',
+}
+
+export const TRACKING_PROVIDER_LABELS: Record<TrackingProvider, string> = {
+  [TrackingProvider.TIRUPATI]: 'Shree Tirupati Courier',
+};
+
 /** Rate template purpose */
 export enum RateTemplateKind {
   QUOTATION = 'QUOTATION',

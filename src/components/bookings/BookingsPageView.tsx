@@ -5,6 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, ConfirmDialog, confirmDialog, Dialog } from '@/components/ui';
 import { BookingFormPanel } from '@/components/bookings/BookingFormPanel';
+import {
+  BookingTrackDialog,
+  canTrackBooking,
+} from '@/components/bookings/BookingTrackDialog';
 import { useEffect, useState } from 'react';
 import { api, unwrap } from '@/lib/api';
 import { fetchPaginated } from '@/lib/list';
@@ -27,6 +31,7 @@ interface ConsignmentRow {
   cgst?: string | number | null;
   sgst?: string | number | null;
   igst?: string | number | null;
+  courierCompany?: { trackingProvider?: string | null } | null;
 }
 
 interface ConsignmentDetail {
@@ -49,6 +54,7 @@ interface ConsignmentDetail {
   remarks?: string | null;
   customer?: { name?: string } | null;
   partyName?: string | null;
+  courierCompany?: { trackingProvider?: string | null } | null;
 }
 
 function money(value: string | number | null | undefined) {
@@ -106,6 +112,8 @@ export function BookingsPageView({
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
+  const [trackId, setTrackId] = useState<string | null>(null);
+  const [trackAwb, setTrackAwb] = useState<string | null>(null);
 
   useEffect(() => {
     const editId = searchParams.get('edit')?.trim();
@@ -262,6 +270,20 @@ export function BookingsPageView({
                     >
                       <i className="pi pi-eye" aria-hidden />
                     </button>
+                    {canTrackBooking(row) ? (
+                      <button
+                        type="button"
+                        className="booking-recent-icon-btn"
+                        title="Track shipment"
+                        aria-label="Track shipment"
+                        onClick={() => {
+                          setTrackId(row.id);
+                          setTrackAwb(row.awb || null);
+                        }}
+                      >
+                        <i className="pi pi-map-marker" aria-hidden />
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="booking-recent-icon-btn"
@@ -402,8 +424,18 @@ export function BookingsPageView({
             </div>
             <div
               className="field full"
-              style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}
+              style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}
             >
+              {canTrackBooking(detail) ? (
+                <Button
+                  label="Track"
+                  icon="pi pi-map-marker"
+                  onClick={() => {
+                    setTrackId(detail.id);
+                    setTrackAwb(detail.awb || null);
+                  }}
+                />
+              ) : null}
               <Button
                 label="Print receipt"
                 icon="pi pi-print"
@@ -422,6 +454,15 @@ export function BookingsPageView({
           </div>
         ) : null}
       </Dialog>
+
+      <BookingTrackDialog
+        consignmentId={trackId}
+        documentNumber={trackAwb}
+        onHide={() => {
+          setTrackId(null);
+          setTrackAwb(null);
+        }}
+      />
     </div>
   );
 }

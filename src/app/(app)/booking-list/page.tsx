@@ -20,6 +20,10 @@ import {
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookingFormPanel } from '@/components/bookings/BookingFormPanel';
+import {
+  BookingTrackDialog,
+  canTrackBooking,
+} from '@/components/bookings/BookingTrackDialog';
 import { ListFilterChrome, ListSearch } from '@/components/ListControls';
 import { api, unwrap } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -48,7 +52,10 @@ interface BookingRow {
   remarks?: string | null;
   partyName?: string | null;
   customer?: { name?: string | null } | null;
-  courierCompany?: { name?: string | null } | null;
+  courierCompany?: {
+    name?: string | null;
+    trackingProvider?: string | null;
+  } | null;
   createdAt: string;
   createdBy?: {
     email?: string | null;
@@ -120,6 +127,8 @@ export default function BookingListPage() {
   const list = useListParams({ sortOptions: SORT_OPTIONS });
   const [bookingType, setBookingType] = useState('');
   const [viewId, setViewId] = useState<string | null>(null);
+  const [trackId, setTrackId] = useState<string | null>(null);
+  const [trackAwb, setTrackAwb] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<BookingType>(BookingType.ACCOUNT);
   const [editShipmentKind, setEditShipmentKind] = useState<ShipmentKind>(
@@ -275,6 +284,18 @@ export default function BookingListPage() {
             aria-label="View"
             onClick={() => setViewId(row.id)}
           />
+          {canTrackBooking(row) ? (
+            <Button
+              icon="pi pi-map-marker"
+              text
+              rounded
+              aria-label="Track shipment"
+              onClick={() => {
+                setTrackId(row.id);
+                setTrackAwb(row.awb || null);
+              }}
+            />
+          ) : null}
           <Button
             icon="pi pi-print"
             text
@@ -432,8 +453,23 @@ export default function BookingListPage() {
             </div>
             <div
               className="field full"
-              style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}
+              style={{
+                display: 'flex',
+                gap: '0.5rem',
+                marginTop: '0.5rem',
+                flexWrap: 'wrap',
+              }}
             >
+              {canTrackBooking(detail) ? (
+                <Button
+                  label="Track"
+                  icon="pi pi-map-marker"
+                  onClick={() => {
+                    setTrackId(detail.id);
+                    setTrackAwb(detail.awb || null);
+                  }}
+                />
+              ) : null}
               <Button
                 label="Print receipt"
                 icon="pi pi-print"
@@ -457,6 +493,15 @@ export default function BookingListPage() {
           </div>
         ) : null}
       </Dialog>
+
+      <BookingTrackDialog
+        consignmentId={trackId}
+        documentNumber={trackAwb}
+        onHide={() => {
+          setTrackId(null);
+          setTrackAwb(null);
+        }}
+      />
 
       <Dialog
         header={editAwb ? `Edit booking · ${editAwb}` : 'Edit booking'}
